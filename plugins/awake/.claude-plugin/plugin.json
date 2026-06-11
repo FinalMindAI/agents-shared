@@ -1,0 +1,6 @@
+{
+  "name": "awake",
+  "version": "1.0.0",
+  "description": "Prevents Mac from sleeping via Amphetamine while any agent session is active. Tracks multiple concurrent sessions.",
+  "platforms": ["darwin"]
+}

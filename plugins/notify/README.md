@@ -1,6 +1,6 @@
 # Notify Plugin
 
-macOS notifications with sound, topic summarization, and terminal activation when Claude Code finishes or needs input.
+macOS notifications with sound, topic summarization, and terminal activation for Claude Code, plus Codex-aware labeling when the same helper is used from Codex CLI.
 
 ## Features
 
@@ -8,6 +8,7 @@ macOS notifications with sound, topic summarization, and terminal activation whe
 - Summarizes the session topic using Haiku (cached per session)
 - Clicking the notification activates your terminal app
 - Auto-detects your terminal from `$TERM_PROGRAM`
+- Detects Codex payloads and titles notifications as `Codex` instead of `Claude Code`
 
 ## Requirements
 

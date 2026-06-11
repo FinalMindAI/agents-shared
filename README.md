@@ -1,12 +1,38 @@
-# Claude Code Shared Plugins
+# Claude Code Shared Skills & Plugins
 
-A collection of shared plugins for [Claude Code](https://claude.ai/claude-code).
+A collection of shared skills, plugins, and notification helpers for Claude Code and Codex CLI.
+
+## Installing skills & plugins from GitHub
+
+Run `./install` to pick from everything available and install to `~/.claude/`:
+
+```bash
+./install                         # interactive picker for all skills & plugins
+./install add garrytan/gstack     # clone a GitHub repo and pick items to add
+./install list                    # show what's installed
+./install remove <name>           # remove a skill or plugin
+./install update                  # pull latest for all repos
+```
+
+External repos are cloned to `repos/<user>/<repo>/` (gitignored) and symlinked into `skills/` and `plugins/`. This keeps upstream repos intact for easy `git pull` updates.
 
 ## Plugins
 
 ### [notify](plugins/notify/)
 
 macOS notifications with sound, topic summarization, and terminal activation when Claude Code finishes or needs input.
+
+### [awake](plugins/awake/)
+
+Starts an Amphetamine session when the first Claude Code or Codex session begins, and ends it when the last one stops.
+
+### [codex-notify](plugins/codex-notify/)
+
+macOS notifications with sound and terminal activation when Codex CLI finishes a turn.
+
+### [codex-awake](plugins/codex-awake/)
+
+Codex hook wrapper for the shared Amphetamine keep-awake helper.
 
 ## Usage
 
@@ -20,4 +46,39 @@ Or test locally:
 
 ```bash
 claude --plugin-dir /path/to/claude-code-shared/plugins/<plugin-name>
+```
+
+For Codex CLI, add the helper script to `~/.codex/config.toml`:
+
+```toml
+notify = ["/path/to/claude-code-shared/plugins/codex-notify/notify-sound.sh"]
+```
+
+For Codex session start/stop hooks, create `~/.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh start"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh stop"
+          }
+        ]
+      }
+    ]
+  }
+}
 ```

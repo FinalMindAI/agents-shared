@@ -1,0 +1,13 @@
+{
+  "garrytan/gstack": {
+    "items": [
+      "browse",
+      "plan-ceo-review",
+      "plan-eng-review",
+      "retro",
+      "review",
+      "ship"
+    ],
+    "repo": "https://github.com/garrytan/gstack"
+  }
+}

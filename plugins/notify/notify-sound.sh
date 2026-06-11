@@ -1,14 +1,17 @@
 #!/bin/bash
-# Claude Code notification hook.
-# Generates a short topic via Haiku (cached per session), falls back to first message.
+# Shared notification hook for Claude Code and Codex CLI.
+# Claude Code sends JSON on stdin. Codex appends a legacy JSON payload as the last argv item.
 # Clicking the notification activates your terminal app.
 # To make sticky: System Settings > Notifications > terminal-notifier > Alerts
 
+set -u
+
 # Guard against recursive hook calls
-if [ -n "$CLAUDE_NOTIFY_RUNNING" ]; then
+if [ -n "${CLAUDE_NOTIFY_RUNNING:-}" ] || [ -n "${CODEX_NOTIFY_RUNNING:-}" ]; then
   exit 0
 fi
 export CLAUDE_NOTIFY_RUNNING=1
+export CODEX_NOTIFY_RUNNING=1
 
 # Resolve plugin root (directory containing this script)
 PLUGIN_ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -17,6 +20,9 @@ PLUGIN_ROOT="$(cd "$(dirname "$0")" && pwd)"
 source "$PLUGIN_ROOT/config.defaults.sh"
 if [ -f "$HOME/.claude/notify-config.sh" ]; then
   source "$HOME/.claude/notify-config.sh"
+fi
+if [ -f "$HOME/.codex/notify-config.sh" ]; then
+  source "$HOME/.codex/notify-config.sh"
 fi
 
 # Auto-detect terminal app bundle ID if not set
@@ -39,18 +45,37 @@ if ! command -v terminal-notifier &>/dev/null; then
   exit 1
 fi
 
-# Parse hook input from stdin
-INPUT=$(cat)
+# Parse hook input from stdin for Claude, or last argv for Codex.
+INPUT="$(cat)"
+ARG_PAYLOAD="${*: -1}"
 
-MESSAGE=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('message','Needs your attention'))" 2>/dev/null)
-TYPE=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('notification_type',d.get('hook_event_name','')))" 2>/dev/null)
-SESSION_ID=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null)
-TRANSCRIPT=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transcript_path',''))" 2>/dev/null)
+if [ -n "$INPUT" ]; then
+  SOURCE="claude"
+elif [ -n "$ARG_PAYLOAD" ]; then
+  INPUT="$ARG_PAYLOAD"
+  SOURCE="codex"
+else
+  exit 0
+fi
 
-MESSAGE="${MESSAGE:-Needs your attention}"
+read_json() {
+  local expr="$1"
+  python3 -c "import json,sys; data=json.loads(sys.stdin.read()); value=$expr; print('' if value is None else value)" <<<"$INPUT" 2>/dev/null
+}
+
+MESSAGE="$(read_json "data.get('message') or data.get('last-assistant-message') or 'Needs your attention'")"
+TYPE="$(read_json "data.get('notification_type') or data.get('hook_event_name') or data.get('type') or ''")"
+SESSION_ID="$(read_json "data.get('session_id', '')")"
+TRANSCRIPT="$(read_json "data.get('transcript_path', '')")"
+CLIENT="$(read_json "data.get('client', '')")"
+FIRST_INPUT_MESSAGE="$(python3 -c "import json,sys; data=json.loads(sys.stdin.read()); msgs=data.get('input-messages') or []; print(msgs[0] if msgs else '')" <<<"$INPUT" 2>/dev/null)"
 
 # Cache directory for generated topics
-CACHE_DIR="$HOME/.claude/.topic-cache"
+if [ "$SOURCE" = "codex" ]; then
+  CACHE_DIR="${CODEX_HOME:-$HOME/.codex}/.topic-cache"
+else
+  CACHE_DIR="$HOME/.claude/.topic-cache"
+fi
 mkdir -p "$CACHE_DIR"
 
 TOPIC=""
@@ -60,7 +85,8 @@ if [ -n "$SESSION_ID" ] && [ -f "$CACHE_DIR/$SESSION_ID" ]; then
   TOPIC=$(cat "$CACHE_DIR/$SESSION_ID")
 fi
 
-# Generate topic if not cached and enabled
+# Generate topic if not cached and enabled.
+# Claude can summarize from transcript; Codex falls back to the first input message.
 if [ -z "$TOPIC" ] && [ "$NOTIFY_TOPIC_ENABLED" = "true" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # Extract first real user message (skip meta entries, commands, and tool results)
   FIRST_MSG=$(python3 -c "
@@ -101,14 +127,28 @@ with open('$TRANSCRIPT') as f:
   fi
 fi
 
+if [ -z "$TOPIC" ] && [ -n "$FIRST_INPUT_MESSAGE" ]; then
+  TOPIC="${FIRST_INPUT_MESSAGE:0:60}"
+fi
+
 # Event type as part of title
-case "$TYPE" in
-  permission_prompt) TITLE="Claude Code — Permission" ;;
-  idle_prompt)       TITLE="Claude Code — Input" ;;
-  auth_success)      TITLE="Claude Code — Auth" ;;
-  Stop)              TITLE="Claude Code — Done" ;;
-  *)                 TITLE="Claude Code" ;;
-esac
+if [ "$SOURCE" = "codex" ] || [ -n "$CLIENT" ]; then
+  TITLE="Codex"
+  if [ -n "$CLIENT" ]; then
+    TITLE="Codex (${CLIENT})"
+  fi
+  case "$TYPE" in
+    agent-turn-complete) TITLE="$TITLE - Done" ;;
+  esac
+else
+  case "$TYPE" in
+    permission_prompt) TITLE="Claude Code — Permission" ;;
+    idle_prompt)       TITLE="Claude Code — Input" ;;
+    auth_success)      TITLE="Claude Code — Auth" ;;
+    Stop)              TITLE="Claude Code — Done" ;;
+    *)                 TITLE="Claude Code" ;;
+  esac
+fi
 
 ARGS=(-title "$TITLE" -message "$MESSAGE" -sound "$NOTIFY_SOUND" -activate "$NOTIFY_TERMINAL_APP" -group "$NOTIFY_GROUP")
 
