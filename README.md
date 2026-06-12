@@ -16,6 +16,12 @@ Run `./install` to pick from everything available and install to `~/.claude/`:
 
 External repos are cloned to `repos/<user>/<repo>/` (gitignored) and symlinked into `skills/` and `plugins/`. This keeps upstream repos intact for easy `git pull` updates.
 
+## First-party skills
+
+### [convert-video-to-sop](skills/convert-video-to-sop/)
+
+Convert screen-recording videos (single file or directory) into illustrated Standard Operating Procedures, output as Word + PDF. Local preprocessing (ffmpeg scene detection, tesseract OCR, classified frame diffs with adaptive densification) keeps token cost ~90% below naive frame-by-frame analysis; estimates cost and confirms with the user before any AI spend. Requires `ffmpeg`, `tesseract`; `pandoc` + LibreOffice for docx/PDF; `whisper-cpp` optional for narrated videos.
+
 ## Plugins
 
 ### [notify](plugins/notify/)

@@ -164,6 +164,55 @@ is_user_plugin_installed() {
   claude plugin list 2>/dev/null | grep -q "❯ $name" 2>/dev/null
 }
 
+# Returns "user", "project", "both", or "" for a skill
+skill_install_level() {
+  local name="$1"
+  local user_installed=0 project_installed=0
+  [ -e "$USER_SKILLS_DIR/$name" ] || [ -L "$USER_SKILLS_DIR/$name" ] && user_installed=1
+  local git_root
+  git_root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || true
+  if [ -n "$git_root" ] && [ "$git_root" != "$ROOT_DIR" ]; then
+    local proj_skills="$git_root/.claude/skills"
+    ([ -e "$proj_skills/$name" ] || [ -L "$proj_skills/$name" ]) && project_installed=1
+  fi
+  if [ "$user_installed" -eq 1 ] && [ "$project_installed" -eq 1 ]; then
+    echo "both"
+  elif [ "$user_installed" -eq 1 ]; then
+    echo "user"
+  elif [ "$project_installed" -eq 1 ]; then
+    echo "project"
+  fi
+}
+
+# Returns "user", "project", "both", or "" for a plugin
+plugin_install_level() {
+  local name="$1"
+  local user_installed=0 project_installed=0
+  claude plugin list --scope user 2>/dev/null | grep -q "❯ $name" 2>/dev/null && user_installed=1 || true
+  local git_root
+  git_root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || true
+  if [ -n "$git_root" ] && [ "$git_root" != "$ROOT_DIR" ]; then
+    claude plugin list --scope project 2>/dev/null | grep -q "❯ $name" 2>/dev/null && project_installed=1 || true
+  fi
+  if [ "$user_installed" -eq 1 ] && [ "$project_installed" -eq 1 ]; then
+    echo "both"
+  elif [ "$user_installed" -eq 1 ]; then
+    echo "user"
+  elif [ "$project_installed" -eq 1 ]; then
+    echo "project"
+  fi
+}
+
+# Build a green "✓ installed (level)" tag fragment
+installed_tag() {
+  local level="$1"
+  case "$level" in
+    both)    printf '\033[0;32m✓ installed (user+project)\033[0m' ;;
+    user)    printf '\033[0;32m✓ installed (user)\033[0m' ;;
+    project) printf '\033[0;32m✓ installed (project)\033[0m' ;;
+  esac
+}
+
 # Detect skills in a repo (directories containing SKILL.md)
 detect_skills() {
   local repo_dir="$1"
@@ -485,11 +534,14 @@ cmd_default() {
 
     # Check if already installed
     local installed=0
-    if [ "$type" = "skill" ] && is_user_skill_installed "$name"; then
-      tag="$tag  ✓ installed"
-      installed=1
-    elif [ "$type" = "plugin" ] && is_user_plugin_installed "$name"; then
-      tag="$tag  ✓ installed"
+    local install_level=""
+    if [ "$type" = "skill" ]; then
+      install_level="$(skill_install_level "$name")"
+    elif [ "$type" = "plugin" ]; then
+      install_level="$(plugin_install_level "$name")"
+    fi
+    if [ -n "$install_level" ]; then
+      tag="$tag  $(installed_tag "$install_level")"
       installed=1
     fi
 
@@ -694,12 +746,20 @@ cmd_add() {
       else
         [ -f "$repo_dir/$name/SKILL.md" ] && desc="$(skill_description "$repo_dir/$name/SKILL.md")"
       fi
-      if [ -L "$SKILLS_DIR/$display_name" ] || [ -d "$SKILLS_DIR/$display_name" ]; then
-        tag="$tag  ✓ installed"
+      local sl
+      sl="$(skill_install_level "$display_name")"
+      if [ -n "$sl" ]; then
+        tag="$tag  $(installed_tag "$sl")"
+      elif [ -L "$SKILLS_DIR/$display_name" ] || [ -d "$SKILLS_DIR/$display_name" ]; then
+        tag="$tag  $(installed_tag "project")"
       fi
     else
-      if [ -L "$PLUGINS_DIR/$name" ] || [ -d "$PLUGINS_DIR/$name" ]; then
-        tag="$tag  ✓ installed"
+      local pl
+      pl="$(plugin_install_level "$name")"
+      if [ -n "$pl" ]; then
+        tag="$tag  $(installed_tag "$pl")"
+      elif [ -L "$PLUGINS_DIR/$name" ] || [ -d "$PLUGINS_DIR/$name" ]; then
+        tag="$tag  $(installed_tag "project")"
       fi
     fi
 
