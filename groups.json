@@ -1,0 +1,11 @@
+{
+  "groups": {
+    "all": [
+      "convert-video-to-sop",
+      "notify",
+      "awake",
+      "codex-notify",
+      "codex-awake"
+    ]
+  }
+}

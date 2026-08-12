@@ -2,6 +2,21 @@
 
 A collection of shared skills, plugins, and notification helpers for Claude Code and Codex CLI.
 
+## Quick start with mise
+
+[mise](https://mise.jdx.dev) is the front door. It pins the one tool the installer needs (`python3`) and wraps the `install` CLI in named tasks:
+
+```bash
+mise setup                     # interactive picker — choose what to install into ~/.claude
+mise run install:all           # install every first-party skill & plugin, no prompts
+mise run install -- notify awake   # install specific items by name
+mise run list                  # show what's installed
+mise run update                # pull latest for cloned external repos
+mise run add -- garrytan/gstack    # clone a GitHub repo and pick items
+```
+
+Groups are data-driven — edit [`groups.json`](groups.json) to define named sets of items, then install one with `./install get --group <name>`. Today there's a single `all` group covering everything first-party.
+
 ## Installing skills & plugins from GitHub
 
 Run `./install` to pick from everything available and install to `~/.claude/`:
