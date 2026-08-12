@@ -2,6 +2,7 @@
 # install — add/remove/list shared skills and plugins from GitHub repos
 # Usage:
 #   ./install                           Interactive picker for everything in this repo
+#   ./install get --group all           Non-interactive install of a group (or named items)
 #   ./install add garrytan/gstack       Clone a GitHub repo and pick items
 #   ./install list                      Show installed skills and plugins
 #   ./install remove <name>             Remove an installed skill or plugin
@@ -13,6 +14,7 @@ REPOS_DIR="$ROOT_DIR/repos"
 SKILLS_DIR="$ROOT_DIR/skills"
 PLUGINS_DIR="$ROOT_DIR/plugins"
 SOURCES_FILE="$ROOT_DIR/sources.json"
+GROUPS_FILE="$ROOT_DIR/groups.json"
 USER_SKILLS_DIR="$HOME/.claude/skills"
 
 # Colors / escapes
@@ -72,12 +74,13 @@ install_codex_notify() {
   script_path="$(resolve_path "$plugin_dir/notify-sound.sh")"
 
   mkdir -p "$codex_home"
-  python3 - <<PY
+  python3 - "$config_file" "$script_path" <<'PY'
 from pathlib import Path
-import re
+import re, sys
 
-config_path = Path(${config_file@Q})
-line = f'notify = ["${script_path}"]'
+config_path = Path(sys.argv[1])
+script_path = sys.argv[2]
+line = f'notify = ["{script_path}"]'
 text = config_path.read_text() if config_path.exists() else ""
 
 pattern = re.compile(r'(?m)^notify\s*=\s*\[.*\]\s*$')
@@ -103,13 +106,14 @@ install_codex_awake() {
   script_path="$(resolve_path "$plugin_dir/awake.sh")"
 
   mkdir -p "$codex_home"
-  python3 - <<PY
+  python3 - "$hooks_file" "$script_path" <<'PY'
 from pathlib import Path
-import json
+import json, sys
 
-hooks_path = Path(${hooks_file@Q})
-start_cmd = "${script_path} start"
-stop_cmd = "${script_path} stop"
+hooks_path = Path(sys.argv[1])
+script_path = sys.argv[2]
+start_cmd = f"{script_path} start"
+stop_cmd = f"{script_path} stop"
 
 if hooks_path.exists():
     data = json.loads(hooks_path.read_text())
@@ -460,8 +464,97 @@ resolve_path() {
     link_target="$(readlink "$path")"
     # Resolve relative symlink from its parent dir
     (cd "$dir" && cd "$(dirname "$link_target")" && echo "$(pwd)/$(basename "$link_target")")
-  else
+  elif [ -d "$path" ]; then
     (cd "$path" && pwd)
+  else
+    # Regular file: resolve its parent dir, keep the basename
+    echo "$(cd "$(dirname "$path")" && pwd)/$(basename "$path")"
+  fi
+}
+
+# Ask a yes/no question, or auto-confirm when assume_yes is 1. Returns 0 for yes.
+prompt_yes() {
+  local assume_yes="$1" prompt="$2"
+  if [ "$assume_yes" = "1" ]; then
+    return 0
+  fi
+  echo -en "$prompt"
+  local ans
+  read -r ans
+  [ "$ans" = "y" ] || [ "$ans" = "Y" ]
+}
+
+# Locate an item by name. Echoes "type|path" (type is skill or plugin), returns 1 if not found.
+find_item() {
+  local want="$1" dir type resolved
+  for dir in "$SKILLS_DIR:skill" "$PLUGINS_DIR:plugin"; do
+    type="${dir##*:}"
+    local base="${dir%:*}"
+    [ -e "$base/$want" ] || continue
+    resolved="$(resolve_path "$base/$want" 2>/dev/null)" || continue
+    [ -d "$resolved" ] || continue
+    echo "$type|$base/$want"
+    return 0
+  done
+  return 1
+}
+
+# Expand a group name from groups.json into a newline-separated list of item names.
+resolve_group() {
+  local group="$1"
+  if [ ! -f "$GROUPS_FILE" ]; then
+    echo -e "${RED}No groups.json found at $GROUPS_FILE${RESET}" >&2
+    return 1
+  fi
+  python3 - "$GROUPS_FILE" "$group" <<'PY'
+import json, sys
+path, group = sys.argv[1], sys.argv[2]
+groups = json.load(open(path)).get("groups", {})
+if group not in groups:
+    sys.stderr.write(f"Unknown group: {group} (available: {', '.join(sorted(groups)) or 'none'})\n")
+    sys.exit(1)
+print("\n".join(groups[group]))
+PY
+}
+
+# Install one item into the given scope. Shared by the picker and `get`.
+install_item() {
+  local name="$1" type="$2" path="$3" install_scope="$4"
+  local target_skills_dir="$5" plugin_scope_flag="$6" assume_yes="$7" git_root="$8"
+
+  if [ "$type" = "skill" ]; then
+    local abs_path
+    abs_path="$(resolve_path "$path")"
+    ln -snf "$abs_path" "$target_skills_dir/$name"
+    local display_target
+    if [ "$install_scope" = "project" ]; then
+      display_target="${target_skills_dir#$git_root/}"
+    else
+      display_target="~/.claude/skills"
+    fi
+    echo -e "  ${GREEN}✓${RESET} $name -> $display_target/$name  ${DIM}(skill)${RESET}"
+    return
+  fi
+
+  local resolved
+  resolved="$(resolve_path "$path")"
+  if is_claude_plugin_dir "$resolved"; then
+    echo -e "  ${CYAN}→${RESET} $name  ${DIM}(plugin — $install_scope scope)${RESET}"
+    if prompt_yes "$assume_yes" "    ${YELLOW}Run 'claude plugin install $plugin_scope_flag $resolved'? [y/N]: ${RESET}"; then
+      claude plugin install $plugin_scope_flag "$resolved" || echo -e "    ${RED}Install failed — try: claude plugin install $plugin_scope_flag $resolved${RESET}"
+    fi
+  elif [ -f "$resolved/notify-sound.sh" ]; then
+    echo -e "  ${CYAN}→${RESET} $name  ${DIM}(codex helper)${RESET}"
+    if prompt_yes "$assume_yes" "    ${YELLOW}Update ~/.codex/config.toml notify hook? [y/N]: ${RESET}"; then
+      install_codex_notify "$resolved"
+    fi
+  elif [ -f "$resolved/awake.sh" ]; then
+    echo -e "  ${CYAN}→${RESET} $name  ${DIM}(codex helper)${RESET}"
+    if prompt_yes "$assume_yes" "    ${YELLOW}Update ~/.codex/hooks.json SessionStart/Stop hooks? [y/N]: ${RESET}"; then
+      install_codex_awake "$resolved"
+    fi
+  else
+    echo -e "  ${YELLOW}⚠${RESET} $name — no plugin manifest found, skipped"
   fi
 }
 
@@ -630,51 +723,79 @@ cmd_default() {
   mkdir -p "$target_skills_dir"
 
   for idx in "${selected_indices[@]}"; do
-    local name="${all_names[$idx]}"
-    local type="${all_types[$idx]}"
-    local path="${all_paths[$idx]}"
-
-    if [ "$type" = "skill" ]; then
-      local abs_path
-      abs_path="$(resolve_path "$path")"
-      ln -snf "$abs_path" "$target_skills_dir/$name"
-      local display_target
-      if [ "$install_scope" = "project" ]; then
-        display_target="${target_skills_dir#$git_root/}"
-      else
-        display_target="~/.claude/skills"
-      fi
-      echo -e "  ${GREEN}✓${RESET} $name -> $display_target/$name  ${DIM}(skill)${RESET}"
-    else
-      local resolved
-      resolved="$(resolve_path "$path")"
-      if is_claude_plugin_dir "$resolved"; then
-        echo -e "  ${CYAN}→${RESET} $name  ${DIM}(plugin — $install_scope scope)${RESET}"
-        echo -en "    ${YELLOW}Run 'claude plugin install $plugin_scope_flag $resolved'? [y/N]: ${RESET}"
-        read -r do_install
-        if [ "$do_install" = "y" ] || [ "$do_install" = "Y" ]; then
-          claude plugin install $plugin_scope_flag "$resolved" || echo -e "    ${RED}Install failed — try: claude plugin install $plugin_scope_flag $resolved${RESET}"
-        fi
-      elif [ -f "$resolved/notify-sound.sh" ]; then
-        echo -e "  ${CYAN}→${RESET} $name  ${DIM}(codex helper)${RESET}"
-        echo -en "    ${YELLOW}Update ~/.codex/config.toml notify hook? [y/N]: ${RESET}"
-        read -r do_install
-        if [ "$do_install" = "y" ] || [ "$do_install" = "Y" ]; then
-          install_codex_notify "$resolved"
-        fi
-      elif [ -f "$resolved/awake.sh" ]; then
-        echo -e "  ${CYAN}→${RESET} $name  ${DIM}(codex helper)${RESET}"
-        echo -en "    ${YELLOW}Update ~/.codex/hooks.json SessionStart/Stop hooks? [y/N]: ${RESET}"
-        read -r do_install
-        if [ "$do_install" = "y" ] || [ "$do_install" = "Y" ]; then
-          install_codex_awake "$resolved"
-        fi
-      else
-        echo -e "  ${YELLOW}⚠${RESET} $name — no plugin manifest found, skipped"
-      fi
-    fi
+    install_item \
+      "${all_names[$idx]}" "${all_types[$idx]}" "${all_paths[$idx]}" \
+      "$install_scope" "$target_skills_dir" "$plugin_scope_flag" 0 "$git_root"
   done
 
+  echo ""
+  echo -e "${GREEN}Done!${RESET} Installed to ${BOLD}$install_scope${RESET} scope."
+}
+
+# ── get (non-interactive) ────────────────────────────────────────────
+
+# Install named items or a group without prompts — the entry point mise tasks call.
+cmd_get() {
+  local names=() scope_choice="" assume_yes=0 group=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --scope) scope_choice="${2:-}"; shift 2 ;;
+      --group) group="${2:-}"; shift 2 ;;
+      --yes|-y) assume_yes=1; shift ;;
+      -*) echo -e "${RED}Unknown flag: $1${RESET}"; exit 1 ;;
+      *) names+=("$1"); shift ;;
+    esac
+  done
+
+  if [ -n "$group" ]; then
+    local expanded
+    expanded="$(resolve_group "$group")" || exit 1
+    while IFS= read -r n; do
+      [ -n "$n" ] && names+=("$n")
+    done <<< "$expanded"
+  fi
+
+  if [ ${#names[@]} -eq 0 ]; then
+    echo -e "${RED}Usage: ./install get [--scope user|project] [--group <group>] [--yes] <name...>${RESET}"
+    exit 1
+  fi
+
+  local install_scope target_skills_dir plugin_scope_flag git_root=""
+  git_root="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || true
+  case "${scope_choice:-user}" in
+    user)
+      install_scope="user"
+      target_skills_dir="$USER_SKILLS_DIR"
+      plugin_scope_flag="--scope user"
+      ;;
+    project)
+      if [ -z "$git_root" ] || [ "$git_root" = "$ROOT_DIR" ]; then
+        echo -e "${RED}--scope project requires being inside another git repo.${RESET}"
+        exit 1
+      fi
+      install_scope="project"
+      target_skills_dir="$git_root/.claude/skills"
+      plugin_scope_flag="--scope project"
+      ;;
+    *)
+      echo -e "${RED}Invalid scope: $scope_choice (use user or project)${RESET}"
+      exit 1
+      ;;
+  esac
+
+  mkdir -p "$target_skills_dir"
+  echo ""
+  local n entry type path
+  for n in "${names[@]}"; do
+    if ! entry="$(find_item "$n")"; then
+      echo -e "  ${YELLOW}⚠${RESET} $n — not found, skipped"
+      continue
+    fi
+    type="${entry%%|*}"
+    path="${entry#*|}"
+    install_item "$n" "$type" "$path" \
+      "$install_scope" "$target_skills_dir" "$plugin_scope_flag" "$assume_yes" "$git_root"
+  done
   echo ""
   echo -e "${GREEN}Done!${RESET} Installed to ${BOLD}$install_scope${RESET} scope."
 }
@@ -1053,6 +1174,7 @@ usage() {
   echo ""
   echo -e "${BOLD}Commands:${RESET}"
   echo "  (none)               Interactive picker — install skills/plugins to ~/.claude/"
+  echo "  get <name...>        Non-interactive install of named items or a --group"
   echo "  add <user/repo>      Clone a GitHub repo and pick skills/plugins to add"
   echo "  list                 Show installed skills and plugins"
   echo "  remove <name>        Remove an installed skill or plugin"
@@ -1060,6 +1182,8 @@ usage() {
   echo ""
   echo -e "${BOLD}Examples:${RESET}"
   echo "  ./install                       # pick from everything in this repo"
+  echo "  ./install get --group all       # install every first-party item (user scope)"
+  echo "  ./install get notify awake      # install specific items non-interactively"
   echo "  ./install add garrytan/gstack   # add skills from a GitHub repo"
   echo "  ./install list"
   echo "  ./install remove review"
@@ -1069,6 +1193,7 @@ usage() {
 
 case "${1:-}" in
   "")     cmd_default ;;
+  get)    shift; cmd_get "$@" ;;
   add)    shift; cmd_add "$@" ;;
   list)   cmd_list ;;
   remove) shift; cmd_remove "$@" ;;

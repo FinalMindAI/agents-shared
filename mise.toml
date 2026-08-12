@@ -1,0 +1,31 @@
+# mise is the front door for agents-shared: `mise setup` to install skills/plugins,
+# `mise install:all` / `mise run install -- <name...>` for specific items. Groups are
+# defined in groups.json. The `install` bash CLI remains the implementation.
+
+[tools]
+# The install script uses python3 to edit JSON/TOML config; pin it for reproducibility.
+python = "3.12"
+
+[tasks.setup]
+description = "Interactive picker — choose skills & plugins to install into ~/.claude"
+run = "{{config_root}}/install"
+
+[tasks."install:all"]
+description = "Install every first-party skill & plugin (the 'all' group in groups.json), user scope"
+run = "{{config_root}}/install get --yes --group all"
+
+[tasks.install]
+description = "Install specific items non-interactively. Example: mise run install -- notify awake"
+run = "{{config_root}}/install get --yes"
+
+[tasks.list]
+description = "Show installed skills and plugins"
+run = "{{config_root}}/install list"
+
+[tasks.update]
+description = "Pull latest for all cloned external repos"
+run = "{{config_root}}/install update"
+
+[tasks.add]
+description = "Clone a GitHub repo and pick items. Example: mise run add -- garrytan/gstack"
+run = "{{config_root}}/install add"
