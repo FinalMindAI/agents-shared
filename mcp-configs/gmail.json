@@ -1,0 +1,7 @@
+{
+  "description": "Gmail MCP server — fill in command+args, or switch to an http server. Secrets via ${ENV_VARS}, never inline.",
+  "type": "stdio",
+  "command": "REPLACE_ME",
+  "args": [],
+  "env": {}
+}

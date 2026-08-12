@@ -18,6 +18,14 @@ run = "{{config_root}}/install get --yes --group all"
 description = "Install specific items non-interactively. Example: mise run install -- notify awake"
 run = "{{config_root}}/install get --yes"
 
+[tasks.up]
+description = "Register MCP servers (all in mcp-configs/ by default). Example: mise run up -- slack gmail"
+run = "{{config_root}}/install mcp up --yes"
+
+[tasks.down]
+description = "Remove MCP servers (all in mcp-configs/ by default). Example: mise run down -- slack"
+run = "{{config_root}}/install mcp down"
+
 [tasks.list]
 description = "Show installed skills and plugins"
 run = "{{config_root}}/install list"

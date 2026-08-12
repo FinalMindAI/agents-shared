@@ -6,6 +6,26 @@
       "awake",
       "codex-notify",
       "codex-awake"
-    ]
+    ],
+    "ryan": [
+      "convert-video-to-sop",
+      "notify",
+      "awake",
+      "codex-notify",
+      "codex-awake",
+      "browse",
+      "plan-ceo-review",
+      "plan-eng-review",
+      "retro",
+      "review",
+      "ship"
+    ],
+    "greg": [
+      "slack",
+      "gmail",
+      "azure",
+      "aws"
+    ],
+    "paul": []
   }
 }

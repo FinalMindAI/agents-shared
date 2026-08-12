@@ -15,6 +15,7 @@ SKILLS_DIR="$ROOT_DIR/skills"
 PLUGINS_DIR="$ROOT_DIR/plugins"
 SOURCES_FILE="$ROOT_DIR/sources.json"
 GROUPS_FILE="$ROOT_DIR/groups.json"
+MCP_CONFIGS_DIR="$ROOT_DIR/mcp-configs"
 USER_SKILLS_DIR="$HOME/.claude/skills"
 
 # Colors / escapes
@@ -45,6 +46,12 @@ skill_description() {
     | tail -1 \
     | sed 's/^[[:space:]]*//' \
     | head -c 80
+}
+
+# Extract the optional "description" field from an mcp-configs/<name>.json file
+mcp_description() {
+  local config_file="$1"
+  python3 -c "import json; print(json.load(open('$config_file')).get('description','')[:80])" 2>/dev/null || true
 }
 
 # Extract description from plugin.json
@@ -496,6 +503,11 @@ find_item() {
     echo "$type|$base/$want"
     return 0
   done
+  # MCP servers are JSON config files, not directories
+  if [ -f "$MCP_CONFIGS_DIR/$want.json" ]; then
+    echo "mcp|$MCP_CONFIGS_DIR/$want.json"
+    return 0
+  fi
   return 1
 }
 
@@ -533,6 +545,29 @@ install_item() {
       display_target="~/.claude/skills"
     fi
     echo -e "  ${GREEN}✓${RESET} $name -> $display_target/$name  ${DIM}(skill)${RESET}"
+    return
+  fi
+
+  if [ "$type" = "mcp" ]; then
+    echo -e "  ${CYAN}→${RESET} $name  ${DIM}(mcp — $install_scope scope)${RESET}"
+    if claude mcp get "$name" >/dev/null 2>&1; then
+      echo -e "    ${DIM}already registered — skipping${RESET}"
+      return
+    fi
+    # Strip the annotation-only "description" key; pass the rest to claude mcp add-json.
+    local server_json
+    server_json="$(python3 -c "import json,sys; d=json.load(open('$path')); d.pop('description',None); sys.stdout.write(json.dumps(d))")"
+    if printf '%s' "$server_json" | grep -q 'REPLACE_ME'; then
+      echo -e "    ${YELLOW}⚠ template not filled in — edit $path before installing${RESET}"
+      return
+    fi
+    if prompt_yes "$assume_yes" "    ${YELLOW}Register MCP '$name' (claude mcp add-json $plugin_scope_flag)? [y/N]: ${RESET}"; then
+      if claude mcp add-json "$name" "$server_json" $plugin_scope_flag; then
+        echo -e "    ${GREEN}✓${RESET} registered mcp $name"
+      else
+        echo -e "    ${RED}Failed — check $path, then: claude mcp add-json $name '<json>' $plugin_scope_flag${RESET}"
+      fi
+    fi
     return
   fi
 
@@ -599,6 +634,19 @@ cmd_default() {
       all_names+=("$name")
       all_types+=("plugin")
       all_descs+=("$desc")
+      all_paths+=("$item")
+    done
+  fi
+
+  # Collect MCP servers from mcp-configs/
+  if [ -d "$MCP_CONFIGS_DIR" ]; then
+    for item in "$MCP_CONFIGS_DIR"/*.json; do
+      [ -e "$item" ] || continue
+      local name
+      name="$(basename "$item" .json)"
+      all_names+=("$name")
+      all_types+=("mcp")
+      all_descs+=("$(mcp_description "$item")")
       all_paths+=("$item")
     done
   fi
@@ -798,6 +846,83 @@ cmd_get() {
   done
   echo ""
   echo -e "${GREEN}Done!${RESET} Installed to ${BOLD}$install_scope${RESET} scope."
+}
+
+# ── mcp up / down ─────────────────────────────────────────────────────
+
+# Register (up) or remove (down) MCP servers. Targets are explicit names, a
+# --group, or (default) every config in mcp-configs/. This is what `mise up`
+# and `mise down` call.
+cmd_mcp() {
+  local action="${1:-}"
+  shift 2>/dev/null || true
+  case "$action" in
+    up|down) ;;
+    *)
+      echo -e "${RED}Usage: ./install mcp <up|down> [--scope user|project|local] [--group <g>] [--yes] [name...]${RESET}"
+      exit 1
+      ;;
+  esac
+
+  local names=() scope_choice="" assume_yes=0 group=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --scope) scope_choice="${2:-}"; shift 2 ;;
+      --group) group="${2:-}"; shift 2 ;;
+      --yes|-y) assume_yes=1; shift ;;
+      -*) echo -e "${RED}Unknown flag: $1${RESET}"; exit 1 ;;
+      *) names+=("$1"); shift ;;
+    esac
+  done
+
+  if [ -n "$group" ]; then
+    local expanded
+    expanded="$(resolve_group "$group")" || exit 1
+    while IFS= read -r n; do
+      [ -n "$n" ] && names+=("$n")
+    done <<< "$expanded"
+  fi
+
+  # Default target: every MCP config in the repo.
+  if [ ${#names[@]} -eq 0 ] && [ -d "$MCP_CONFIGS_DIR" ]; then
+    for f in "$MCP_CONFIGS_DIR"/*.json; do
+      [ -e "$f" ] || continue
+      names+=("$(basename "$f" .json)")
+    done
+  fi
+
+  if [ ${#names[@]} -eq 0 ]; then
+    echo -e "${YELLOW}No MCP servers to $action.${RESET}"
+    exit 0
+  fi
+
+  local scope_word="${scope_choice:-user}" scope_flag
+  case "$scope_word" in
+    user|project|local) scope_flag="--scope $scope_word" ;;
+    *) echo -e "${RED}Invalid scope: $scope_choice (user|project|local)${RESET}"; exit 1 ;;
+  esac
+
+  echo ""
+  local n
+  for n in "${names[@]}"; do
+    if [ ! -f "$MCP_CONFIGS_DIR/$n.json" ]; then
+      # Groups can mix MCPs with skills/plugins — quietly skip non-MCP members there.
+      [ -n "$group" ] || echo -e "  ${YELLOW}⚠${RESET} $n — no mcp-configs/$n.json, skipped"
+      continue
+    fi
+    if [ "$action" = "up" ]; then
+      install_item "$n" "mcp" "$MCP_CONFIGS_DIR/$n.json" "$scope_word" "" "$scope_flag" "$assume_yes" ""
+    else
+      echo -e "  ${CYAN}→${RESET} $n  ${DIM}(mcp down — $scope_word scope)${RESET}"
+      if claude mcp remove "$n" $scope_flag >/dev/null 2>&1; then
+        echo -e "    ${GREEN}✓${RESET} removed mcp $n"
+      else
+        echo -e "    ${DIM}not registered — nothing to remove${RESET}"
+      fi
+    fi
+  done
+  echo ""
+  echo -e "${GREEN}Done!${RESET} mcp $action complete."
 }
 
 # ── add ──────────────────────────────────────────────────────────────
@@ -1175,6 +1300,7 @@ usage() {
   echo -e "${BOLD}Commands:${RESET}"
   echo "  (none)               Interactive picker — install skills/plugins to ~/.claude/"
   echo "  get <name...>        Non-interactive install of named items or a --group"
+  echo "  mcp up|down [names]  Register / remove MCP servers (all in mcp-configs/ by default)"
   echo "  add <user/repo>      Clone a GitHub repo and pick skills/plugins to add"
   echo "  list                 Show installed skills and plugins"
   echo "  remove <name>        Remove an installed skill or plugin"
@@ -1194,6 +1320,7 @@ usage() {
 case "${1:-}" in
   "")     cmd_default ;;
   get)    shift; cmd_get "$@" ;;
+  mcp)    shift; cmd_mcp "$@" ;;
   add)    shift; cmd_add "$@" ;;
   list)   cmd_list ;;
   remove) shift; cmd_remove "$@" ;;

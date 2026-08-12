@@ -10,12 +10,16 @@ A collection of shared skills, plugins, and notification helpers for Claude Code
 mise setup                     # interactive picker — choose what to install into ~/.claude
 mise run install:all           # install every first-party skill & plugin, no prompts
 mise run install -- notify awake   # install specific items by name
+mise up                        # register MCP servers from mcp-configs/
+mise down                      # remove those MCP servers
 mise run list                  # show what's installed
 mise run update                # pull latest for cloned external repos
 mise run add -- garrytan/gstack    # clone a GitHub repo and pick items
 ```
 
-Groups are data-driven — edit [`groups.json`](groups.json) to define named sets of items, then install one with `./install get --group <name>`. Today there's a single `all` group covering everything first-party.
+Groups are data-driven — edit [`groups.json`](groups.json) to define named sets of items, then install one with `./install get --group <name>`. A group may mix skills, plugins, and MCP servers; `get` routes each to the right installer. Today: `all` (first-party items) and per-person groups.
+
+MCP servers live in [`mcp-configs/`](mcp-configs/) (one `<name>.json` per server) and are registered/removed with `mise up` / `mise down` — see [`mcp-configs/README.md`](mcp-configs/README.md).
 
 ## Installing skills & plugins from GitHub
 
