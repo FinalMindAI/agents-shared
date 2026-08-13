@@ -2,6 +2,8 @@
 
 A collection of shared skills, plugins, and notification helpers for Claude Code and Codex CLI.
 
+> Adding something? See **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to add a skill, an MCP server, a setup profile, or port a skill from another repo.
+
 ## Quick start with mise
 
 [mise](https://mise.jdx.dev) is the front door. It pins the one tool the installer needs (`python3`) and wraps the `install` CLI in named tasks:
