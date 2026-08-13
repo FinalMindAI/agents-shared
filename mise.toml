@@ -10,6 +10,10 @@ python = "3.12"
 node = "24"
 pnpm = "10"
 uv = "0.11"
+# gh drives the PR flows (pr-create, dependabot-triage); auth lives in ~/.config/gh, so a
+# mise-managed binary reuses an existing `gh auth login`. Other CLIs the skills shell out to
+# (op, aws, az) stay system-managed — see the external prereqs note in README.
+gh = "2"
 
 [tasks.setup]
 description = "Bootstrap the 'default' profile: skills/plugins + MCP servers + auth (profiles.json)"
@@ -18,6 +22,10 @@ run = "{{config_root}}/install setup default"
 [tasks."setup:ryan"]
 description = "Bootstrap Ryan's profile (profiles.json → profiles.ryan)"
 run = "{{config_root}}/install setup ryan"
+
+[tasks."setup:greg"]
+description = "Bootstrap Greg's profile (profiles.json → profiles.greg)"
+run = "{{config_root}}/install setup greg"
 
 [tasks."setup:all"]
 description = "Bootstrap everything: every first-party skill/plugin + every MCP server + auth"
@@ -42,6 +50,10 @@ run = "{{config_root}}/install list"
 [tasks.update]
 description = "Pull latest for all cloned external repos"
 run = "{{config_root}}/install update"
+
+[tasks.clean]
+description = "Remove every skill + plugin this repo installed into ~/.claude (reversible)"
+run = "{{config_root}}/install clean"
 
 [tasks.add]
 description = "Clone a GitHub repo and pick items. Example: mise run add -- garrytan/gstack"

@@ -12,6 +12,11 @@
       "items": [],
       "mcp": []
     },
+    "greg": {
+      "description": "Greg's machine profile — the three work skills plus all credentialed MCP servers, no plugins or SOP tooling.",
+      "items": ["pr-create", "email-cleanup", "dependabot-triage"],
+      "mcp": ["slack", "gmail", "aws-mcp", "azure", "datadog", "sentry", "linear", "notion"]
+    },
     "all": {
       "description": "Everything: every first-party skill/plugin and every MCP server (incl. github/langfuse-prod, which stay unconnected until their header tokens are exported).",
       "items": ["*"],

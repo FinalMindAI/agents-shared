@@ -1142,6 +1142,60 @@ with open('$tmp', 'w') as f:
   fi
 }
 
+# ── clean ────────────────────────────────────────────────────────────
+
+# Undo everything this repo installed into ~/.claude: every skill symlink whose
+# target resolves back into this checkout, and every plugin from this repo's
+# marketplace. Precisely scoped (skills from other repos are left alone) and
+# reversible (re-run `./install setup <profile>`). Does not touch MCP servers,
+# Codex hooks, or the marketplace registration.
+cmd_clean() {
+  echo ""
+  echo -e "${BOLD}Cleaning agents-shared installs${RESET} ${DIM}(user scope)${RESET}"
+
+  echo -e "\n${BOLD}Skills${RESET}"
+  local removed=0
+  if [ -d "$USER_SKILLS_DIR" ]; then
+    for link in "$USER_SKILLS_DIR"/*; do
+      [ -L "$link" ] || continue
+      local tgt name
+      tgt="$(readlink "$link" 2>/dev/null || echo "")"
+      case "$tgt" in
+        "$ROOT_DIR"/*)
+          name="$(basename "$link")"
+          rm "$link"
+          echo -e "  ${GREEN}✓${RESET} removed $name  ${DIM}-> $tgt${RESET}"
+          removed=1
+          ;;
+      esac
+    done
+  fi
+  [ "$removed" -eq 0 ] && echo -e "  ${DIM}(none pointing into this repo)${RESET}"
+
+  echo -e "\n${BOLD}Plugins${RESET}"
+  local plugin_removed=0
+  if [ -d "$PLUGINS_DIR" ]; then
+    for dir in "$PLUGINS_DIR"/*/; do
+      [ -d "$dir" ] || continue
+      is_claude_plugin_dir "$dir" || continue
+      local pname
+      pname="$(basename "$dir")"
+      is_user_plugin_installed "$pname" || continue
+      if claude plugin uninstall "$pname@$MARKETPLACE_NAME" >/dev/null 2>&1 \
+        || claude plugin uninstall "$pname" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${RESET} uninstalled $pname"
+        plugin_removed=1
+      else
+        echo -e "  ${RED}✘${RESET} failed to uninstall $pname — try: claude plugin uninstall $pname@$MARKETPLACE_NAME"
+      fi
+    done
+  fi
+  [ "$plugin_removed" -eq 0 ] && echo -e "  ${DIM}(none)${RESET}"
+
+  echo -e "\n${DIM}Left in place: MCP servers (remove with 'claude mcp remove <name> -s user'), Codex hooks (~/.codex), and the '$MARKETPLACE_NAME' marketplace.${RESET}"
+  echo ""
+}
+
 # ── update ───────────────────────────────────────────────────────────
 
 cmd_update() {
@@ -1595,6 +1649,7 @@ usage() {
   echo "  mcp [list|deps|get]  Manage MCP servers (mcp/*.group.json), user scope"
   echo "  list                 Show installed skills and plugins"
   echo "  remove <name>        Remove an installed skill or plugin"
+  echo "  clean                Remove every skill + plugin this repo installed into ~/.claude"
   echo "  update [user/repo]   Pull latest for one or all repos"
   echo ""
   echo -e "${BOLD}Examples:${RESET}"
@@ -1616,6 +1671,7 @@ case "${1:-}" in
   setup)  shift; cmd_setup "$@" ;;
   list)   cmd_list ;;
   remove) shift; cmd_remove "$@" ;;
+  clean)  cmd_clean ;;
   update) shift; cmd_update "$@" ;;
   -h|--help|help) usage ;;
   *)      usage; exit 1 ;;
