@@ -17,6 +17,7 @@ mise pick                      # interactive picker — hand-choose skills & plu
 mise run install:all           # install every first-party skill & plugin, no prompts
 mise run install -- notify awake   # install specific items by name
 mise run list                  # show what's installed
+mise run clean                 # remove every skill + plugin this repo installed into ~/.claude
 mise run update                # pull latest for cloned external repos
 mise run add -- garrytan/gstack    # clone a GitHub repo and pick items
 
@@ -28,7 +29,9 @@ mise run mcp:auth -- aws-mcp       # run a server's auth recipe (aws sso login, 
 mise run mcp:setup                 # one shot: deps + register all + auth all
 ```
 
-Setup profiles are data-driven — [`profiles.json`](profiles.json) defines named bundles of skills/plugins + MCP servers (`default`, `ryan`, `all`), each installable with `mise setup:<name>` (`extends` merges a base; `"*"` means everything available). Item-only groups for `./install get --group <name>` live in [`groups.json`](groups.json).
+Setup profiles are data-driven — [`profiles.json`](profiles.json) defines named bundles of skills/plugins + MCP servers (`default`, `ryan`, `greg`, `all`), each installable with `mise setup:<name>` (`extends` merges a base; `"*"` means everything available). Item-only groups for `./install get --group <name>` live in [`groups.json`](groups.json).
+
+**External prereqs (system-managed, not pinned by mise):** mise pins the install/runtime toolchain (`python`, `node`, `pnpm`, `uv`) plus `gh` for the PR flows. A few CLIs the skills and MCP auth recipes shell out to stay on your system install because mise can't provide their integrations: **`op`** (1Password — needs the desktop app for biometric unlock; used by `mcp/with-env`), **`aws`** / **`az`** (used by the `aws-mcp` / `azure` auth recipes). The convert-video-to-sop skill's media tools (`ffmpeg`, `tesseract`, `pandoc`, LibreOffice, `whisper-cpp`) are documented in that skill.
 
 ## Installing skills & plugins from GitHub
 
@@ -39,6 +42,7 @@ Run `./install` to pick from everything available and install to `~/.claude/`:
 ./install add garrytan/gstack     # clone a GitHub repo and pick items to add
 ./install list                    # show what's installed
 ./install remove <name>           # remove a skill or plugin
+./install clean                   # remove every skill + plugin this repo installed into ~/.claude
 ./install update                  # pull latest for all repos
 ```
 
@@ -144,16 +148,17 @@ Once exported, `./install mcp list` still shows these as "not registered" until 
 
 ## Usage
 
-Install a plugin:
+Plugins install from this repo's marketplace, not by path — the current Claude CLI only installs `name@marketplace`. `./install` (and `mise setup`) register the marketplace automatically; to do it by hand:
 
 ```bash
-claude plugin add /path/to/claude-code-shared/plugins/<plugin-name>
+claude plugin marketplace add /path/to/agents-shared   # once
+claude plugin install notify@agents-shared             # then install by name
 ```
 
-Or test locally:
+Or test locally without installing:
 
 ```bash
-claude --plugin-dir /path/to/claude-code-shared/plugins/<plugin-name>
+claude --plugin-dir /path/to/agents-shared/plugins/<plugin-name>
 ```
 
 For Codex CLI, add the helper script to `~/.codex/config.toml`:
