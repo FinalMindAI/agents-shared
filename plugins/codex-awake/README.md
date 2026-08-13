@@ -14,7 +14,7 @@ Create `~/.codex/hooks.json` with the absolute path to this wrapper:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh start"
+            "command": "/path/to/agents-shared/plugins/codex-awake/awake.sh start"
           }
         ]
       }
@@ -24,7 +24,7 @@ Create `~/.codex/hooks.json` with the absolute path to this wrapper:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh stop"
+            "command": "/path/to/agents-shared/plugins/codex-awake/awake.sh stop"
           }
         ]
       }

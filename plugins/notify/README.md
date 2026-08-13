@@ -19,13 +19,15 @@ macOS notifications with sound, topic summarization, and terminal activation for
 ## Install
 
 ```bash
-claude plugin add /path/to/claude-code-shared/plugins/notify
+claude plugin install notify@agents-shared
 ```
 
-Or test locally:
+`./install` (and `mise setup`) register the marketplace automatically; to do it by hand first, run `claude plugin marketplace add /path/to/agents-shared`.
+
+Or test locally without installing:
 
 ```bash
-claude --plugin-dir /path/to/claude-code-shared/plugins/notify
+claude --plugin-dir /path/to/agents-shared/plugins/notify
 ```
 
 ## Configuration

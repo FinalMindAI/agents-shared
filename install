@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# install — add/remove/list shared skills and plugins from GitHub repos
+# install — install skills/plugins, MCP servers, and named profiles into ~/.claude
 # Usage:
 #   ./install                           Interactive picker for everything in this repo
+#   ./install setup [profile]           Install a profile (profiles.json): skills/plugins + mcp + auth
 #   ./install get --group all           Non-interactive install of a group (or named items)
 #   ./install add garrytan/gstack       Clone a GitHub repo and pick items
+#   ./install mcp [list|deps|get|auth]  Manage MCP servers (mcp/*.group.json), user scope
 #   ./install list                      Show installed skills and plugins
 #   ./install remove <name>             Remove an installed skill or plugin
+#   ./install clean                     Remove every skill + plugin this repo installed
 #   ./install update [user/repo]        Pull latest for one or all repos
 set -euo pipefail
 

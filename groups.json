@@ -2,6 +2,9 @@
   "groups": {
     "all": [
       "convert-video-to-sop",
+      "pr-create",
+      "email-cleanup",
+      "dependabot-triage",
       "notify",
       "awake",
       "codex-notify",
