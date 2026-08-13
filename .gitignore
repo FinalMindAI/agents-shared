@@ -8,3 +8,6 @@ repos/
 node_modules/
 .venv/
 .env
+
+# Machine-local skill state (e.g. email-cleanup per-mailbox status files) — never committed
+var/

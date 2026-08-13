@@ -1,6 +1,6 @@
 ---
 name: email-cleanup
-description: Drain a drifted Gmail inbox back to single/double digits by labeling + archiving noise in parallel buckets, then close the loop by authoring the Gmail filters that stop the refill (and unsubscribe links where a filter is the wrong tool). Never deletes. Maintains email_cleanup_status.md as the durable record of taxonomy, keep-exceptions, filters, and senders that must never be filtered. Trigger on "clean up my email", "inbox zero", "archive old email", "my inbox is a mess", "what can I unsubscribe from", "do I need new filters", "email filters".
+description: Drain a drifted Gmail inbox back to single/double digits by labeling + archiving noise in parallel buckets, then close the loop by authoring the Gmail filters that stop the refill (and unsubscribe links where a filter is the wrong tool). Never deletes. Maintains a per-mailbox status file (email_cleanup_status.<mailbox>.md) as the durable record of taxonomy, keep-exceptions, filters, and senders that must never be filtered. Trigger on "clean up my email", "inbox zero", "archive old email", "my inbox is a mess", "what can I unsubscribe from", "do I need new filters", "email filters".
 disable-model-invocation: true
 ---
 
@@ -12,11 +12,13 @@ archiving alone means you do it again in three weeks.
 
 It uses the standalone **`gmail` MCP server** (registered from agents-shared — see `mcp/personal.group.json`).
 That server exposes not just search/label/archive but also `create_filter` and `create_label`, so this
-skill can **author filters and labels directly** (with your confirmation), not only hand you paste-ready
+skill can **author filters and labels directly** (automatically, within safe guardrails), not only hand you paste-ready
 specs. All tool names are `mcp__gmail__*`.
 
 This runs for **you** — the person invoking it, resolved in Step 0. It reads and maintains a status
-file scoped to your mailbox; two people running it never share taxonomy or keep-exceptions.
+file **named after the resolved mailbox**, so two mailboxes (even on one machine, even a work and a
+personal address) never share taxonomy or keep-exceptions, and a run on one mailbox never reads or
+overwrites another's state.
 
 Two halves, and the second is the one that matters:
 1. **Drain** — fan out parallel bucket sweeps, label + archive, never delete.
@@ -24,14 +26,28 @@ Two halves, and the second is the one that matters:
    the filter. Where a filter is the wrong instrument (cold outreach, opt-in newsletters), say so
    and use the right one.
 
-State lives in **`email_cleanup_status.md`** — the taxonomy, the keep-exceptions, which filters exist
+State lives in a **per-mailbox** status file — the taxonomy, the keep-exceptions, which filters exist
 vs. still pending, and the senders that must never be filtered. Read it first; rewrite it at the end.
 
-**Resolve its directory in this order** (so state hands off between machines via git):
-1. `$EMAIL_CLEANUP_STATUS_DIR` if set
-2. `~/code/claude-sync/email-cleanup/` if that directory exists — a git-tracked store, so a run on one
-   machine is visible on the next after a pull
-3. `$HOME` otherwise (machine without the checkout)
+**The filename is keyed to the mailbox resolved in Step 0**: `email_cleanup_status.<mailbox>.md`, e.g.
+`email_cleanup_status.greg@quovy.com.md`. Use the full address verbatim (the `@` and `.` are valid in a
+filename). This is the fix for the shared store below holding more than one mailbox's history: a bare
+`email_cleanup_status.md` or a *different* address's file belongs to another mailbox — **never read or
+overwrite it**. If only a legacy bare file exists for the mailbox you resolved, treat this as a first
+run (empty state) rather than adopting it.
+
+**Resolve the directory in this order.** The store is machine-local and **untracked** — it lives inside
+the agents-shared checkout this skill installs from, under `var/`, which is gitignored, so mailbox state
+never gets committed:
+1. `$EMAIL_CLEANUP_STATUS_DIR` if set — explicit override, wins.
+2. `<agents-shared>/var/email-cleanup/`, where `<agents-shared>` is the repo this skill is symlinked
+   from. Resolve it from the skill's own install path and create the dir if missing:
+   ```bash
+   skill="$(readlink ~/.claude/skills/email-cleanup 2>/dev/null || echo ~/.claude/skills/email-cleanup)"
+   statedir="$(cd "$(dirname "$skill")/.." && pwd)/var/email-cleanup"   # <repo>/var/email-cleanup
+   mkdir -p "$statedir"
+   ```
+3. `$HOME` otherwise (skill not installed via the symlink).
 
 ## Hard rules
 
@@ -41,10 +57,22 @@ vs. still pending, and the senders that must never be filtered. Read it first; r
   sweep safe to run aggressively. Do not call `batch_delete_messages`, `delete_message`, or `trash_*`.
 - **Never send, reply, or draft** mail as part of a cleanup. Archiving a thread is not answering it.
   Don't touch `send_message`, `create_draft`, or `send_draft`.
-- **Filters and labels are mutations — confirm before creating.** `create_filter` / `create_label`
-  change the mailbox. Propose them, get an explicit yes, then create. `create_filter` does **not**
-  retroactively apply to existing mail (that's a UI-only option), so you still archive the current
-  backlog with `batch_modify_messages` and let the filter catch future arrivals.
+- **Auto-create the filters and labels — don't stop to confirm each one.** This server exposes
+  `create_filter` / `create_label`, so create them as part of the run once a bucket has earned a rule.
+  What keeps auto-creation safe is that every filter is **reversible** (`delete_filter`) and **bounded**
+  to non-destructive actions — so it's held to hard guardrails, not a confirmation prompt:
+  - **Only** `addLabelIds` (a user label), `removeLabelIds: ["INBOX"]` (skip inbox), and/or
+    `removeLabelIds: ["UNREAD"]` (mark read). **Never** a filter that deletes, trashes, or marks spam —
+    never put `TRASH` or `SPAM` in `addLabelIds`, never author a delete action. A filter must never be
+    able to destroy mail.
+  - **Never** author a rule that would catch a NEVER-FILTER sender or any human sender, and always carry
+    the mailbox's keep-exceptions as `criteria.negatedQuery`.
+  - **Dedup and verify first:** `list_filters` and skip if an equivalent rule already exists; run the
+    candidate query and eyeball the hit count (the filter-traps in Step 3) before creating — a rule that
+    buries real mail is worse than the noise.
+  - **Report everything created** (filters and labels) in the final summary, noting it's reversible.
+  `create_filter` does **not** retroactively apply to existing mail (that's a UI-only option), so you
+  still archive the current backlog with `batch_modify_messages` and let the filter catch future mail.
 - **Can't click unsubscribe.** You can extract the URL from the HTML; the human clicks it.
 - **A human sender is never noise.** If a message reads as a person writing prose to you, it stays in
   the inbox (the one exception is the aged-thread rule below, which is age-based and reported).
@@ -71,8 +99,9 @@ the user's first run — do the personalization step below before anything else.
 4. **Suggest a taxonomy.** From the recon clusters + existing labels, propose a label set and which
    sender/subject clusters map to each. Anchor on the **common taxonomy** below, but only suggest a
    label if the recon shows mail that would fill it. Present the suggestions and let the user confirm,
-   rename, add, or drop — their choices are authoritative. For any confirmed label that doesn't exist
-   yet, offer to create it with `create_label` (get the yes first); note the ones you create.
+   rename, add, or drop — their choices are authoritative. Once the taxonomy is agreed, **create any
+   missing labels directly with `create_label`** (no separate per-label confirmation — the taxonomy is
+   the confirmation); note the ones you create.
 5. **Write the profile** to `~/.claude/email-cleanup/profile.md` (create the dir). Format:
 
    ```markdown
@@ -91,8 +120,9 @@ the user's first run — do the personalization step below before anything else.
    Keep it small and factual. On later runs, re-read it but don't rebuild it unless the user asks to
    re-personalize.
 
-Read `email_cleanup_status.md` in the resolved dir (first run: no file, treat every section as empty).
-Load its **NEVER-FILTER** list and **keep-exceptions** before touching anything.
+Read `email_cleanup_status.<mailbox>.md` in the resolved dir (first run — no file for *this* mailbox,
+or only a bare/other-address file exists: treat every section as empty, do not adopt another mailbox's
+file). Load its **NEVER-FILTER** list and **keep-exceptions** before touching anything.
 
 Load tools on demand — the full Gmail MCP set is large (~60 tools):
 `ToolSearch` → `select:mcp__gmail__list_messages,mcp__gmail__get_message,mcp__gmail__list_labels,mcp__gmail__create_label,mcp__gmail__batch_modify_messages,mcp__gmail__list_filters,mcp__gmail__create_filter`
@@ -216,9 +246,10 @@ create_filter
   action:   { addLabelIds: ["Label_123"], removeLabelIds: ["INBOX","UNREAD"] }
 ```
 
-**Confirm each proposed filter with the user, then create it.** Show the criteria/action in the table
-above so they can eyeball it. After creating, remember: `create_filter` only affects *future* mail —
-archive the existing matching backlog in Step 1/2 via `batch_modify_messages`.
+**Create each filter directly** once it clears the guardrails (non-destructive actions only, no
+NEVER-FILTER/human sender, keep-exceptions as `negatedQuery`, deduped against `list_filters`, hit count
+verified). No per-filter confirmation. After creating, remember: `create_filter` only affects *future*
+mail — archive the existing matching backlog in Step 1/2 via `batch_modify_messages`.
 
 If a rule is genuinely too subtle for `create_filter` (rare — `negatedQuery` covers most keep-exceptions),
 fall back to a paste-ready spec for the Gmail Settings → Filters dialog and say so.
@@ -274,7 +305,8 @@ gone and links are still pending.
 
 ## Step 5 — Write state, report
 
-Rewrite `email_cleanup_status.md` in the resolved status dir (Step 0):
+Rewrite `email_cleanup_status.<mailbox>.md` in the resolved status dir (Step 0) — the per-mailbox
+filename, never a bare `email_cleanup_status.md`:
 
 ```markdown
 # Email Cleanup Status
@@ -313,6 +345,7 @@ Then report to the user, short:
 - What's left and why it's genuinely live.
 - **Root cause** — which filter gaps caused the drift. This is the insight, not the archive count.
 - Anything flagged from the aged-thread sweep that may still be unresolved — verbatim, prominent.
-- **Filters** — which you created this run, and any still pending the user's yes. If a run genuinely
+- **Filters** — which you created this run (they're live and reversible via `delete_filter`), and any
+  that fell back to a paste-ready spec because they were too subtle to auto-create. If a run genuinely
   found no gap, say "no new filters needed this run" explicitly rather than omitting it. Then note the
   unsubscribe file path.
