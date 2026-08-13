@@ -52,6 +52,10 @@ Convert screen-recording videos (single file or directory) into illustrated Stan
 
 Run tests, lint, typecheck, and format for the changed stack (TypeScript/pnpm, Python/ruff), create a `<type>/<desc>` branch, commit, and open a PR with a description built from the full diff. Stops at PR creation for human review (pair with `pr-babysit` to watch CI). Writes the commit and PR under your name — no AI attribution, no em dashes.
 
+### [email-cleanup](skills/email-cleanup/)
+
+Drain a drifted Gmail inbox back to single/double digits: fan out parallel bucket sweeps that label + archive noise (never deletes), then close the loop by authoring the Gmail filters that stop the refill. Uses the standalone `gmail` MCP server — since that server exposes `create_filter`/`create_label`, the skill creates filters and labels directly (with confirmation), not just paste-ready specs. Maintains a per-mailbox `email_cleanup_status.md` (taxonomy, keep-exceptions, never-filter list) so state carries across runs and machines. Invoke explicitly (`disable-model-invocation`).
+
 ## Plugins
 
 ### [notify](plugins/notify/)
