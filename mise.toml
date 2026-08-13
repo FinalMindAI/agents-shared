@@ -5,9 +5,26 @@
 [tools]
 # The install script uses python3 to edit JSON/TOML config; pin it for reproducibility.
 python = "3.12"
+# Vendored MCP server runtimes are launched from this repo (node_modules/.bin, .venv/bin)
+# instead of npx/uvx pulling latest each launch, so pin the runtimes + package managers.
+node = "24"
+pnpm = "10"
+uv = "0.11"
 
 [tasks.setup]
-description = "Interactive picker — choose skills & plugins to install into ~/.claude"
+description = "Bootstrap the 'default' profile: skills/plugins + MCP servers + auth (profiles.json)"
+run = "{{config_root}}/install setup default"
+
+[tasks."setup:ryan"]
+description = "Bootstrap Ryan's profile (profiles.json → profiles.ryan)"
+run = "{{config_root}}/install setup ryan"
+
+[tasks."setup:all"]
+description = "Bootstrap everything: every first-party skill/plugin + every MCP server + auth"
+run = "{{config_root}}/install setup all"
+
+[tasks.pick]
+description = "Interactive picker — hand-choose skills & plugins to install into ~/.claude"
 run = "{{config_root}}/install"
 
 [tasks."install:all"]
@@ -29,3 +46,27 @@ run = "{{config_root}}/install update"
 [tasks.add]
 description = "Clone a GitHub repo and pick items. Example: mise run add -- garrytan/gstack"
 run = "{{config_root}}/install add"
+
+[tasks."mcp:deps"]
+description = "Install the vendored MCP runtimes (pnpm install + uv venv) into this repo"
+run = "{{config_root}}/install mcp deps"
+
+[tasks.mcp]
+description = "Show MCP servers defined in mcp/*.group.json and their install status"
+run = "{{config_root}}/install mcp list"
+
+[tasks."mcp:get"]
+description = "Register specific MCP servers at user scope. Example: mise run mcp:get -- gmail datadog"
+run = "{{config_root}}/install mcp get"
+
+[tasks."mcp:all"]
+description = "Register every MCP server from all mcp/*.group.json at user scope"
+run = "{{config_root}}/install mcp get --all"
+
+[tasks."mcp:auth"]
+description = "Run each server's auth recipe (aws sso login, az login, …). Example: mise run mcp:auth -- aws-mcp"
+run = "{{config_root}}/install mcp auth"
+
+[tasks."mcp:setup"]
+description = "One shot: install MCP runtimes, register all servers, run all auth recipes"
+run = "{{config_root}}/install mcp setup"

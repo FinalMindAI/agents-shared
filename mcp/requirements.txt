@@ -1,0 +1,4 @@
+# Vendored, version-pinned python MCP server runtimes for agents-shared.
+# Installed into the repo-local .venv by `./install mcp deps` (uv), launched from
+# .venv/bin via mcp/with-env instead of `uvx` pulling latest each launch.
+mcp-proxy-for-aws==1.6.3
