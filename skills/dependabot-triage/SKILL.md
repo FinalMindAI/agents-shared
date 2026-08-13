@@ -1,6 +1,6 @@
 ---
 name: dependabot-triage
-version: 1.0.0
+version: 1.1.0
 description: |
   Triage and remediate open Dependabot pull requests and security alerts in a
   repo end-to-end: enumerate both surfaces, assess each bump's real blast radius
@@ -62,6 +62,13 @@ gh api -X GET /repos/OWNER/REPO/dependabot/alerts -f state=open --paginate \
 Note which alerts already have a PR raised against them (dedupe against step 1)
 and which are transitive with no PR — those get fixed via overrides in step 6.
 
+**CVE false-positive guard.** Dependabot injects a boilerplate compatibility
+*badge* into every PR body whose link points at a security *help* page — naive
+"the body mentions security → it's a CVE" detection trips on it. The real
+discriminator is an actual **`CVE-####` / `GHSA-xxxx`** identifier in the
+`/dependabot/alerts` output above (or a real advisory section in the changelog),
+never the badge URL. A real CVE always routes to a human.
+
 ## Step 2 — Triage & prioritize by risk
 
 For each PR pull the body/changelog and CI state:
@@ -75,13 +82,48 @@ Classify each by:
 
 - **Blast radius** — transitive / dev / test dependency (low) · direct runtime
   dependency (medium) · security-critical or auth/realtime/crypto path (high).
-- **CI state** — already green vs. red (a red check is often just a stale
-  lockfile, see step 5, not a real incompatibility).
+- **Semver jump** — patch < minor < major. **Majors are always high-risk →
+  human-only**, never batched.
+- **CI state** — decode `mergeStateStatus`, don't eyeball a red X: `BLOCKED` =
+  checks green, awaiting human review (not stale); `UNKNOWN` = GitHub still
+  computing mergeability → re-poll, don't treat as terminal; `DIRTY` = merge
+  conflict → rebase (step 7); `BEHIND` = base drifted → rebase only if the
+  branch ruleset is strict. A red check is often just a stale lockfile (step 5),
+  not a real incompatibility.
+- **Already approved** — a bump a human already signed off is "awaiting merge",
+  not a fresh decision. Detect it from `latestReviews` carrying a **non-bot**
+  `APPROVED` verdict, **not** `reviewDecision` (which stays `""` on repos that
+  don't *require* review even after a real approval). Exclude bot logins
+  (`dependabot`, `github-actions`, anything ending in `[bot]`) so a self-approve
+  workflow isn't mistaken for human sign-off.
 - **Shape** — single-package bump · a **grouped** PR (npm-major group, the
   github-actions group) that moves several packages at once · a **duplicate** of
   a bump another open PR already carries.
 
 Grouped and duplicate PRs get flagged here; they are handled in the split plan.
+
+### Supply-chain provenance — verify a version is real before flagging it
+
+When a target version looks *impossible* — one you don't recognize, that
+"shouldn't exist", or an unusually large jump — **resolve it against the
+registry before concluding anything.** A knowledge cutoff makes "that version
+doesn't exist" claims unreliable for anything published recently; treating a
+real release as a phantom is a false supply-chain escalation.
+
+```bash
+# npm: a real version returns a manifest with dist.tarball + dist.integrity;
+# a non-existent one returns {"error":...}
+curl -s https://registry.npmjs.org/<pkg>/<ver> | jq '{tarball:.dist.tarball, integrity:.dist.integrity}'
+curl -s https://registry.npmjs.org/<pkg> | jq '.time["<ver>"]'   # publish date
+```
+
+Then **match the lockfile `integrity` (`pnpm-lock.yaml`) against what the
+registry serves** — an exact match confirms the genuine published artifact, not
+a typosquat. Escalate as suspicious **only after the registry check fails**
+(version absent, or integrity mismatch). A version that resolves with a matching
+hash is legitimate, however unfamiliar — clear it on the normal changelog path.
+(The bundled workflow's assess agents already do this per bump; re-run it by
+hand for anything you're escalating.)
 
 ## Step 3 — Risk assessment via parallel agents (the Workflow)
 
@@ -139,6 +181,16 @@ fixes don't collide. Common fixes seen in practice:
   green.
 - **Type migrations** — a `@types/*` or TS-facing bump changes a signature;
   follow the migration note to the exact callsite.
+- **Linter/formatter bump enables new rules** — an `eslint` / `biome` /
+  `prettier` bump that fails CI on newly-enabled rules is usually mechanical:
+  run the repo's autofix on the Dependabot branch, commit, push.
+  ```bash
+  git fetch origin <pr_branch> && git checkout <pr_branch>
+  pnpm lint --fix   # or: pnpm format / pnpm biome check --write — match the repo
+  git commit -am "chore: satisfy new lint rules from <pkg> <ver>" && git push
+  ```
+  Guardrail: a **large** violation count (50+) or fixes that change runtime
+  behavior is not a mechanical bump → surface to a human instead of auto-fixing.
 - **Behavioral mitigations** — a new default that is wrong for us. Example seen
   in the wild: `undici` v8 defaults `allowH2: true`; at an SSRF-sensitive
   fetch boundary that widens the surface, so pin `allowH2: false` at our call
@@ -192,8 +244,11 @@ moment one merges.** So merge serially: merge one, rebase the next, repeat.
 
 - **Dependabot's own `@dependabot rebase` FAILS here.** Its runner can't
   regenerate our lockfile under the repo's supply-chain settings (7-day rule,
-  blocked-exotic-deps), so it either errors or produces a bad lock. Rebase the
-  lockfile **manually** instead:
+  blocked-exotic-deps), so it either errors or produces a bad lock. Two more
+  reasons not to lean on it: if the branch is already up-to-date with base it's a
+  **no-op** (no commit, CI won't re-run), and a "can't authenticate to a private
+  registry" / "no knowledge of this PR" reply is a dead end that needs a human —
+  don't loop on it. Rebase the lockfile **manually** instead:
 
   ```bash
   git fetch origin && git checkout <branch>
@@ -219,5 +274,6 @@ moment one merges.** So merge serially: merge one, rebase the next, repeat.
 When done, report: the ranked table (package, from→to, risk, why), the split
 plan (which bucket each landed in), what merged vs. what's a PR awaiting
 approval, which alerts closed and how (bump vs. bounded override), and anything
-that needs a human decision (a HIGH spike, a bump blocked by the 7-day rule, a
-UI change awaiting visual QA).
+that needs a human decision (a HIGH spike, a real CVE, a bump blocked by the
+7-day rule, a UI change awaiting visual QA, or a supply-chain provenance concern
+where a version failed the registry check).
