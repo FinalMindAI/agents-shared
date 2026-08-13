@@ -43,7 +43,10 @@ plugin_description() {
   local plugin_dir="$1"
   local manifest="$plugin_dir/.claude-plugin/plugin.json"
   if [ -f "$manifest" ]; then
-    python3 -c "import json; print(json.load(open('$manifest')).get('description','')[:80])" 2>/dev/null || true
+    python3 - "$manifest" 2>/dev/null <<'PY' || true
+import json, sys
+print(json.load(open(sys.argv[1])).get('description', '')[:80])
+PY
   fi
 }
 

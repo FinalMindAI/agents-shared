@@ -517,21 +517,21 @@ cmd_add() {
   local items_json
   items_json=$(printf '%s\n' "${all_installed[@]}" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
 
-  python3 -c "
+  python3 - "$SOURCES_FILE" "$slug" "$items_json" "$tmp" <<'PY'
 import json, sys
-with open('$SOURCES_FILE') as f:
+src, slug, items_json, tmp = sys.argv[1:5]
+with open(src) as f:
     data = json.load(f)
-entry = data.get('$slug', {'items': []})
+entry = data.get(slug, {'items': []})
 existing = set(entry.get('items', []))
-new_items = json.loads('$items_json')
-existing.update(new_items)
+existing.update(json.loads(items_json))
 entry['items'] = sorted(existing)
-entry['repo'] = 'https://github.com/$slug'
-data['$slug'] = entry
-with open('$tmp', 'w') as f:
+entry['repo'] = f'https://github.com/{slug}'
+data[slug] = entry
+with open(tmp, 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
-"
+PY
   mv "$tmp" "$SOURCES_FILE"
 
   local total=$(( ${#installed_skills[@]} + ${#installed_plugins[@]} ))
@@ -600,16 +600,16 @@ cmd_list() {
   if [ -f "$SOURCES_FILE" ]; then
     echo ""
     echo -e "${BOLD}Sources:${RESET}"
-    python3 -c "
-import json
-with open('$SOURCES_FILE') as f:
+    python3 - "$SOURCES_FILE" 2>/dev/null <<'PY' || true
+import json, sys
+with open(sys.argv[1]) as f:
     data = json.load(f)
 for slug, info in sorted(data.items()):
     repo = info.get('repo', '?')
     items = ', '.join(info.get('items', []))
     print(f'  {slug}  ({items})')
     print(f'    {repo}')
-" 2>/dev/null || true
+PY
   fi
   echo ""
 }
@@ -652,21 +652,22 @@ cmd_remove() {
   if [ -f "$SOURCES_FILE" ]; then
     local tmp
     tmp="$(mktemp)"
-    python3 -c "
-import json
-with open('$SOURCES_FILE') as f:
+    python3 - "$SOURCES_FILE" "$name" "$tmp" 2>/dev/null <<'PY'
+import json, sys
+src, name, tmp = sys.argv[1:4]
+with open(src) as f:
     data = json.load(f)
 for slug in list(data.keys()):
     items = data[slug].get('items', [])
-    if '$name' in items:
-        items.remove('$name')
+    if name in items:
+        items.remove(name)
         data[slug]['items'] = items
     if not items:
         del data[slug]
-with open('$tmp', 'w') as f:
+with open(tmp, 'w') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
-" 2>/dev/null
+PY
     mv "$tmp" "$SOURCES_FILE"
   fi
 }
