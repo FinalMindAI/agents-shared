@@ -1,9 +1,17 @@
 {
+  "name": "agents-shared",
+  "owner": { "name": "FinalMindAI", "url": "https://github.com/FinalMindAI/agents-shared" },
+  "description": "Shared Claude Code plugins for Quovy: macOS notifications and keep-awake.",
   "plugins": [
     {
       "name": "notify",
-      "path": "plugins/notify",
+      "source": "./plugins/notify",
       "description": "macOS notifications with sound, topic summarization, and terminal activation when Claude Code finishes or needs input."
+    },
+    {
+      "name": "awake",
+      "source": "./plugins/awake",
+      "description": "Starts an Amphetamine session when the first Claude Code or Codex session begins, and ends it when the last one stops."
     }
   ]
 }

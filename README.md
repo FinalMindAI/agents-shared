@@ -144,16 +144,17 @@ Once exported, `./install mcp list` still shows these as "not registered" until 
 
 ## Usage
 
-Install a plugin:
+Plugins install from this repo's marketplace, not by path — the current Claude CLI only installs `name@marketplace`. `./install` (and `mise setup`) register the marketplace automatically; to do it by hand:
 
 ```bash
-claude plugin add /path/to/claude-code-shared/plugins/<plugin-name>
+claude plugin marketplace add /path/to/agents-shared   # once
+claude plugin install notify@agents-shared             # then install by name
 ```
 
-Or test locally:
+Or test locally without installing:
 
 ```bash
-claude --plugin-dir /path/to/claude-code-shared/plugins/<plugin-name>
+claude --plugin-dir /path/to/agents-shared/plugins/<plugin-name>
 ```
 
 For Codex CLI, add the helper script to `~/.codex/config.toml`:

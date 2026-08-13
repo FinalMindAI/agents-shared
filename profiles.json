@@ -3,7 +3,7 @@
   "profiles": {
     "default": {
       "description": "Core set for any machine: first-party skills/plugins + the OAuth/credentialed MCP servers.",
-      "items": ["convert-video-to-sop", "pr-create", "email-cleanup", "notify", "awake", "codex-notify", "codex-awake"],
+      "items": ["convert-video-to-sop", "pr-create", "email-cleanup", "dependabot-triage", "notify", "awake", "codex-notify", "codex-awake"],
       "mcp": ["slack", "gmail", "aws-mcp", "azure", "datadog", "sentry", "linear", "notion"]
     },
     "ryan": {
