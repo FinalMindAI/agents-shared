@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# with-env — load agents-shared MCP secrets, then exec the given server binary.
+#
+# Registered MCP servers run as:  mcp/with-env <local-binary> [args...]
+# so nothing secret ever lands in ~/.claude.json — secrets come from ../.env at
+# launch. Two supported .env value styles (may be mixed, per line):
+#   KEY=op://<vault>/<item>/<field>   → resolved at launch via the 1Password CLI
+#   KEY=literal-value                 → used as-is
+#
+# --no-masking is REQUIRED: MCP stdio servers speak JSON-RPC over stdout, and
+# `op run`'s default secret-masking would rewrite matching substrings and corrupt
+# the protocol. op must be unlocked (desktop app / biometric) at launch; the
+# literal-.env fallback below covers the offline / no-op case.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$REPO/.env"
+
+# Take the op-run path only when an UNCOMMENTED assignment actually references op://
+# (a commented example line must not force every server through `op run`).
+if [ -f "$ENV_FILE" ] && grep -qE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=[^#]*op://' "$ENV_FILE"; then
+  if command -v op >/dev/null 2>&1; then
+    exec op run --no-masking --env-file="$ENV_FILE" -- "$@"
+  fi
+  # Fail loud: sourcing literally would export the unresolved "op://…" string as the
+  # secret value, which surfaces later as a confusing auth failure one layer removed.
+  echo "with-env: $ENV_FILE has op:// references but the 1Password CLI (op) is not installed." >&2
+  echo "          Install op (or replace the op:// refs with literals) before launching." >&2
+  exit 1
+fi
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
+exec "$@"

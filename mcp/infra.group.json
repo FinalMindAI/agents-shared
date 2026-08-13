@@ -1,0 +1,114 @@
+{
+  "_meta": {
+    "group": "infra",
+    "purpose": "Cloud/infra MCP servers useful at USER scope (available from any cwd), so cross-project skills reach them outside the FinalMindAI/quovy repo. aws-mcp and azure are ALSO defined in that repo's committed .mcp.json at project scope — project scope wins there; this user-scope copy is the fallback everywhere else.",
+    "schema": "See personal.group.json _meta.schema. Optional `auth` drives `./install mcp auth`: {type:cmd, check:[argv], login:[argv]} runs check and fires login if it fails ($VARS expand from .env/env); {type:manual, instructions:str} just prints the step.",
+    "secrets_rule": "Provided at launch by mcp/with-env from ../.env. Never inline a token."
+  },
+  "servers": {
+    "aws-mcp": {
+      "kind": "stdio",
+      "runtime": "python",
+      "bin": "mcp-proxy-for-aws",
+      "args": [
+        "https://aws-mcp.us-east-1.api.aws/mcp",
+        "--metadata",
+        "AWS_REGION=us-east-1"
+      ],
+      "needs_env": ["AWS_PROFILE"],
+      "auth": {
+        "type": "cmd",
+        "check": ["aws", "sts", "get-caller-identity", "--profile", "$AWS_PROFILE"],
+        "login": ["aws", "sso", "login", "--profile", "$AWS_PROFILE"]
+      },
+      "_desc": "AWS API access via the hosted aws-mcp proxy, read through the AWS_PROFILE credentials.",
+      "_prereq": "AWS_PROFILE (default quovy-readonly) set in .env and SSO-logged-in — automated by `./install mcp auth aws-mcp`."
+    },
+    "azure": {
+      "kind": "stdio",
+      "runtime": "node",
+      "bin": "azmcp",
+      "args": ["server", "start"],
+      "needs_env": [],
+      "auth": {
+        "type": "cmd",
+        "check": ["az", "account", "show"],
+        "login": ["az", "login"]
+      },
+      "_desc": "Azure resource management via the official @azure/mcp server.",
+      "_prereq": "Azure CLI signed in — automated by `./install mcp auth azure`."
+    },
+    "datadog": {
+      "kind": "http",
+      "url": "https://mcp.datadoghq.com/v1/mcp",
+      "needs_env": [],
+      "auth": {
+        "type": "manual",
+        "instructions": "Run /mcp in Claude Code and complete the Datadog OAuth login (browser). Non-US1 sites: swap the host in the manifest (e.g. mcp.datadoghq.eu)."
+      },
+      "_desc": "Official Datadog hosted MCP server (US1). Auth via OAuth.",
+      "_prereq": "OAuth via /mcp in Claude Code — cannot be scripted (Claude Code owns the handshake)."
+    },
+    "sentry": {
+      "kind": "http",
+      "url": "https://mcp.sentry.dev/mcp",
+      "needs_env": [],
+      "auth": {
+        "type": "manual",
+        "instructions": "Run /mcp in Claude Code and complete the Sentry OAuth login (browser)."
+      },
+      "_desc": "Sentry hosted MCP server (issues, errors, projects). Auth via OAuth.",
+      "_prereq": "OAuth via /mcp in Claude Code — cannot be scripted (Claude Code owns the handshake)."
+    },
+    "linear": {
+      "kind": "http",
+      "url": "https://mcp.linear.app/mcp",
+      "needs_env": [],
+      "auth": {
+        "type": "manual",
+        "instructions": "Run /mcp in Claude Code and complete the Linear OAuth login (browser)."
+      },
+      "_desc": "Linear hosted MCP server (issues, projects, cycles). Auth via OAuth.",
+      "_prereq": "OAuth via /mcp in Claude Code — cannot be scripted (Claude Code owns the handshake)."
+    },
+    "github": {
+      "kind": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_MCP_PAT}"
+      },
+      "needs_env": ["GITHUB_MCP_PAT"],
+      "auth": {
+        "type": "manual",
+        "instructions": "The hosted GitHub MCP rejects Claude Code's OAuth dynamic client registration, so it needs a Personal Access Token in a Bearer header, exported into the shell that launches Claude Code (http headers bypass mcp/with-env). Steps: 1) github.com → Settings → Developer settings → Personal access tokens → generate a fine-grained token with the repo scopes you need. 2) Store in 1Password + add to your shell rc: export GITHUB_MCP_PAT=$(op read 'op://<vault>/github-mcp/token'). 3) ./install mcp get --force github, restart Claude Code + /mcp."
+      },
+      "_desc": "GitHub hosted MCP server (repos, issues, PRs, Actions). Auth via a PAT Bearer header (OAuth DCR unsupported).",
+      "_prereq": "Requires GITHUB_MCP_PAT exported in the launching shell (see auth.instructions). Not auto-connected until the token exists."
+    },
+    "notion": {
+      "kind": "http",
+      "url": "https://mcp.notion.com/mcp",
+      "needs_env": [],
+      "auth": {
+        "type": "manual",
+        "instructions": "Run /mcp in Claude Code and complete the Notion OAuth login (browser)."
+      },
+      "_desc": "Notion hosted MCP server (pages, databases, search). Auth via OAuth.",
+      "_prereq": "OAuth via /mcp in Claude Code — cannot be scripted (Claude Code owns the handshake)."
+    },
+    "langfuse-prod": {
+      "kind": "http",
+      "url": "https://langfuse.quovy.com/api/public/mcp",
+      "headers": {
+        "Authorization": "Basic ${LANGFUSE_PROD_MCP_AUTH}"
+      },
+      "needs_env": ["LANGFUSE_PROD_MCP_AUTH"],
+      "auth": {
+        "type": "manual",
+        "instructions": "Header-secret server (no OAuth). LANGFUSE_PROD_MCP_AUTH must be a base64 'publicKey:secretKey' string, exported into the shell that launches Claude Code (http headers are sent by Claude Code directly, NOT via mcp/with-env). Steps: 1) In Langfuse (langfuse.quovy.com) → Settings → API Keys, copy the public + secret key. 2) base64-encode 'PUBLIC:SECRET' (printf '%s' 'pk:sk' | base64). 3) Store it in 1Password and add to your shell rc: export LANGFUSE_PROD_MCP_AUTH=$(op read 'op://<vault>/langfuse-prod-mcp/credential'). 4) Re-register: ./install mcp get --force langfuse-prod, then restart Claude Code + /mcp."
+      },
+      "_desc": "Langfuse (prod) hosted MCP server — LLM traces/observability. Auth via a Basic header token.",
+      "_prereq": "Requires LANGFUSE_PROD_MCP_AUTH exported in the launching shell (see auth.instructions). Not auto-registered until the token exists."
+    }
+  }
+}

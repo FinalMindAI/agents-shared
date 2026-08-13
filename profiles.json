@@ -1,0 +1,21 @@
+{
+  "_comment": "Named setup profiles for `mise setup` / `mise setup:<name>` / `mise setup:all`. A profile bundles skill/plugin items (from skills/ + plugins/) and MCP servers (from mcp/*.group.json). `extends` merges a base profile; `\"*\"` in items or mcp means everything available. `./install setup <profile>` installs the items at user scope, then registers + auths the MCP servers.",
+  "profiles": {
+    "default": {
+      "description": "Core set for any machine: first-party skills/plugins + the OAuth/credentialed MCP servers.",
+      "items": ["convert-video-to-sop", "notify", "awake", "codex-notify", "codex-awake"],
+      "mcp": ["slack", "gmail", "aws-mcp", "azure", "datadog", "sentry", "linear", "notion"]
+    },
+    "ryan": {
+      "description": "Ryan's machine profile — starts from default; add/remove items and mcp servers as needed.",
+      "extends": "default",
+      "items": [],
+      "mcp": []
+    },
+    "all": {
+      "description": "Everything: every first-party skill/plugin and every MCP server (incl. github/langfuse-prod, which stay unconnected until their header tokens are exported).",
+      "items": ["*"],
+      "mcp": ["*"]
+    }
+  }
+}

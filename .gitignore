@@ -3,3 +3,8 @@
 *.swo
 *~
 repos/
+
+# MCP vendored runtimes + secrets (pnpm-lock.yaml IS committed for reproducibility)
+node_modules/
+.venv/
+.env

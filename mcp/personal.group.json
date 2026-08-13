@@ -1,0 +1,36 @@
+{
+  "_meta": {
+    "group": "personal",
+    "purpose": "Cross-project MCP servers that must work from any cwd (briefing, email-cleanup) — NOT tied to the FinalMindAI/quovy repo. Registered at USER scope, launched from repo-local vendored runtimes via mcp/with-env.",
+    "schema": "stdio server = {kind:stdio, runtime:node|python, bin:<node_modules/.bin or .venv/bin name>, args:[...], needs_env:[...]}. http server = {kind:http, url, headers?}. `_desc`/`_prereq` are documentation.",
+    "secrets_rule": "Secrets are provided at launch by mcp/with-env from ../.env (op:// references or literals) using each server's own env-var name. Never inline a token here or in ~/.claude.json."
+  },
+  "servers": {
+    "slack": {
+      "kind": "stdio",
+      "runtime": "node",
+      "bin": "slack-mcp-server",
+      "args": ["--transport", "stdio"],
+      "needs_env": ["SLACK_MCP_XOXP_TOKEN"],
+      "_desc": "Slack workspace access (channels, messages, search).",
+      "_prereq": "Already registered at user scope on this machine. Re-register only if you want it launched from the vendored runtime; needs SLACK_MCP_XOXP_TOKEN in .env."
+    },
+    "gmail": {
+      "kind": "stdio",
+      "runtime": "node",
+      "bin": "gmail-mcp",
+      "args": [],
+      "needs_env": ["GMAIL_OAUTH_PATH", "GMAIL_CREDENTIALS_PATH"],
+      "env": {
+        "PORT": "39271",
+        "AUTH_SERVER_PORT": "39272"
+      },
+      "auth": {
+        "type": "manual",
+        "instructions": "One-time Google OAuth (~2 min). 1) console.cloud.google.com → pick/create a project. 2) APIs & Services → Library → enable the Gmail API. 3) APIs & Services → Credentials → Create Credentials → OAuth client ID (configure consent screen as External + add yourself as a Test user if prompted) → application type Desktop app → Create → Download JSON. 4) Save it at GMAIL_OAUTH_PATH (~/.gmail-mcp/gcp-oauth.keys.json). 5) Mint credentials on the non-standard callback port: AUTH_SERVER_PORT=39272 node_modules/.bin/gmail-mcp auth — opens a browser for gmail.modify + gmail.settings.basic, writes GMAIL_CREDENTIALS_PATH. 6) Restart Claude Code + /mcp."
+      },
+      "_desc": "Gmail read + modify (archive/labels) + filter CRUD. Used by email-cleanup.",
+      "_prereq": "One-time OAuth: create a Desktop OAuth client, set GMAIL_OAUTH_PATH/GMAIL_CREDENTIALS_PATH in .env (absolute paths), run the auth flow once to mint credentials (scopes: gmail.modify + gmail.settings.basic)."
+    }
+  }
+}
