@@ -47,7 +47,7 @@ Use the `codex-awake` wrapper there:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh start"
+            "command": "/path/to/agents-shared/plugins/codex-awake/awake.sh start"
           }
         ]
       }
@@ -57,7 +57,7 @@ Use the `codex-awake` wrapper there:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh stop"
+            "command": "/path/to/agents-shared/plugins/codex-awake/awake.sh stop"
           }
         ]
       }

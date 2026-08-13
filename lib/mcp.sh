@@ -255,8 +255,10 @@ for name in targets:
     if not auth:
         print(f"  {DIM}·{RESET} {name} — not connected; token comes from .env (check the value)"); continue
     if auth.get("type") == "manual":
-        print(f"  {CYAN}→{RESET} {name} — manual step:")
-        print(f"      {DIM}{auth['instructions']}{RESET}"); continue
+        print(f"  {CYAN}→{RESET} {name} — manual step: {auth['instructions']}")
+        if auth.get("doc"):
+            print(f"      {DIM}{auth['doc']}{RESET}")
+        continue
 
     check, login = auth.get("check"), auth.get("login")
     if check and check_ok(check):

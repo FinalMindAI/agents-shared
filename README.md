@@ -12,6 +12,7 @@ A collection of shared skills, plugins, and notification helpers for Claude Code
 mise setup                     # bootstrap the 'default' profile: skills/plugins + MCP + auth
 mise setup:all                 # everything: every skill/plugin + every MCP server + auth
 mise setup:ryan                # a named per-person profile (defined in profiles.json)
+mise setup:greg                # another per-person profile
 
 mise pick                      # interactive picker — hand-choose skills & plugins
 mise run install:all           # install every first-party skill & plugin, no prompts
@@ -129,7 +130,7 @@ So `./install mcp setup` gets you all the way for the CLI-auth servers; `datadog
 
 ### Servers that need extra setup
 
-Most servers are one OAuth click in `/mcp`. Two need a one-time setup you do yourself — the exact steps live in each server's `auth.instructions` in its manifest, so **`./install mcp auth <name>` prints them as a checklist** (the wizard is the single source of truth; the summaries below mirror it).
+Most servers are one OAuth click in `/mcp`. Two need a one-time setup you do yourself. `./install mcp auth <name>` prints a one-line reminder and points back here — these steps are the source of truth.
 
 **`gmail`** — one-time Google OAuth (~2 min):
 1. [console.cloud.google.com](https://console.cloud.google.com) → pick/create a project.
@@ -164,7 +165,7 @@ claude --plugin-dir /path/to/agents-shared/plugins/<plugin-name>
 For Codex CLI, add the helper script to `~/.codex/config.toml`:
 
 ```toml
-notify = ["/path/to/claude-code-shared/plugins/codex-notify/notify-sound.sh"]
+notify = ["/path/to/agents-shared/plugins/codex-notify/notify-sound.sh"]
 ```
 
 For Codex session start/stop hooks, create `~/.codex/hooks.json`:
@@ -177,7 +178,7 @@ For Codex session start/stop hooks, create `~/.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh start"
+            "command": "/path/to/agents-shared/plugins/codex-awake/awake.sh start"
           }
         ]
       }
@@ -187,7 +188,7 @@ For Codex session start/stop hooks, create `~/.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/claude-code-shared/plugins/codex-awake/awake.sh stop"
+            "command": "/path/to/agents-shared/plugins/codex-awake/awake.sh stop"
           }
         ]
       }

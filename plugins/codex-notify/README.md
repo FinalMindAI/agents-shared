@@ -25,7 +25,7 @@ Codex's documented `notify` integration runs on turn completion. It is not the s
 Add this to `~/.codex/config.toml` with the absolute path to the script in this repo:
 
 ```toml
-notify = ["/path/to/claude-code-shared/plugins/codex-notify/notify-sound.sh"]
+notify = ["/path/to/agents-shared/plugins/codex-notify/notify-sound.sh"]
 ```
 
 ## Configuration

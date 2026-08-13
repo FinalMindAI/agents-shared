@@ -84,7 +84,7 @@ mailbox. Get it from `get_profile`, or from a `list_messages q:"in:sent"` (the F
 Everything downstream (self-addressed automation, `to:` filters) keys on that address.
 
 **Then load the user profile: `~/.claude/email-cleanup/profile.md`.** This is machine-local, per-user
-identity — separate from the git-synced status file (which is run history). If it exists, load `name`,
+identity — separate from the untracked per-mailbox status file (which is run history). If it exists, load `name`,
 `email`, and `label_preferences` and skip to reading the status file. **If it does NOT exist, this is
 the user's first run — do the personalization step below before anything else.**
 

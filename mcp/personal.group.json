@@ -27,7 +27,8 @@
       },
       "auth": {
         "type": "manual",
-        "instructions": "One-time Google OAuth (~2 min). 1) console.cloud.google.com → pick/create a project. 2) APIs & Services → Library → enable the Gmail API. 3) APIs & Services → Credentials → Create Credentials → OAuth client ID (configure consent screen as External + add yourself as a Test user if prompted) → application type Desktop app → Create → Download JSON. 4) Save it at GMAIL_OAUTH_PATH (~/.gmail-mcp/gcp-oauth.keys.json). 5) Mint credentials on the non-standard callback port: AUTH_SERVER_PORT=39272 node_modules/.bin/gmail-mcp auth — opens a browser for gmail.modify + gmail.settings.basic, writes GMAIL_CREDENTIALS_PATH. 6) Restart Claude Code + /mcp."
+        "instructions": "One-time Google OAuth (~2 min) to mint Gmail credentials.",
+        "doc": "Full steps: README → \"Servers that need extra setup\" (gmail)."
       },
       "_desc": "Gmail read + modify (archive/labels) + filter CRUD. Used by email-cleanup.",
       "_prereq": "One-time OAuth: create a Desktop OAuth client, set GMAIL_OAUTH_PATH/GMAIL_CREDENTIALS_PATH in .env (absolute paths), run the auth flow once to mint credentials (scopes: gmail.modify + gmail.settings.basic)."
