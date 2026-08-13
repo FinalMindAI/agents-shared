@@ -26,7 +26,6 @@ YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 RED='\033[0;31m'
 RESET='\033[0m'
-REVERSE='\033[7m'
 HIDE_CURSOR='\033[?25l'
 SHOW_CURSOR='\033[?25h'
 
@@ -548,6 +547,7 @@ install_item() {
     if [ "$install_scope" = "project" ]; then
       display_target="${target_skills_dir#$git_root/}"
     else
+      # shellcheck disable=SC2088  # literal display label, not a path to expand
       display_target="~/.claude/skills"
     fi
     echo -e "  ${GREEN}✓${RESET} $name -> $display_target/$name  ${DIM}(skill)${RESET}"
@@ -646,7 +646,6 @@ cmd_default() {
     fi
 
     # Check if already installed
-    local installed=0
     local install_level=""
     if [ "$type" = "skill" ]; then
       install_level="$(skill_install_level "$name")"
@@ -655,7 +654,6 @@ cmd_default() {
     fi
     if [ -n "$install_level" ]; then
       tag="$tag  $(installed_tag "$install_level")"
-      installed=1
     fi
 
     [ -n "$labels" ] && labels="$labels|"

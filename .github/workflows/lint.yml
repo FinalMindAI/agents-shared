@@ -1,0 +1,32 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ubuntu-latest ships shellcheck; SC1091 is unfollowable sourced files (.env,
+      # per-machine config) that don't exist at lint time.
+      - name: Shellcheck
+        run: shellcheck -S warning --exclude=SC1091 install mcp/with-env plugins/*/*.sh
+
+      - name: Bash syntax
+        run: |
+          for f in install mcp/with-env plugins/*/*.sh; do
+            bash -n "$f"
+          done
+
+      - name: Validate JSON
+        run: |
+          rc=0
+          while IFS= read -r f; do
+            python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f" \
+              || { echo "::error file=$f::invalid JSON"; rc=1; }
+          done < <(git ls-files '*.json')
+          exit "$rc"
