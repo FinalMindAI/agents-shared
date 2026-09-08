@@ -82,3 +82,7 @@ run = "{{config_root}}/install mcp auth"
 [tasks."mcp:setup"]
 description = "One shot: install MCP runtimes, register all servers, run all auth recipes"
 run = "{{config_root}}/install mcp setup"
+
+[tasks.aws]
+description = "Create all quovy AWS SSO profiles in ~/.aws/config (idempotent) + log in. --dry-run to preview."
+run = "{{config_root}}/scripts/aws-sso-profiles.sh"
