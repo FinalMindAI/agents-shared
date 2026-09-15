@@ -4,9 +4,9 @@ Prevents your Mac from sleeping while any Claude Code or Codex session is active
 
 ## How it works
 
-- **Session counter** — A shared counter at `~/.claude/.awake/sessions` tracks how many agent sessions are running.
+- **Session markers** — One marker file per session id under `~/.claude/.awake/sessions.d/` tracks which agent sessions are running.
 - **Start** — When the first session starts, an Amphetamine session is started via AppleScript.
-- **Stop** — When the last session ends, the Amphetamine session is ended.
+- **SessionEnd** — When the last session ends, the Amphetamine session is ended.
 - Multiple concurrent agent sessions are supported — Amphetamine stays active until all finish.
 
 ## Requirements
@@ -25,13 +25,15 @@ Prevents your Mac from sleeping while any Claude Code or Codex session is active
 # Check how many sessions are active
 ./awake.sh status
 
-# Reset everything (end Amphetamine + clear counter)
+# Reset everything (end Amphetamine + clear markers)
 ./awake.sh reset
 ```
 
 ## Claude Code hooks
 
-The plugin registers `SessionStart` and `Stop` hooks automatically via `hooks/hooks.json`.
+The plugin registers `SessionStart` and `SessionEnd` hooks automatically via `hooks/hooks.json`.
+
+Note: bind teardown to `SessionEnd`, never `Stop` — `Stop` fires at the end of every assistant turn, which would end the Amphetamine session mid-work.
 
 ## Codex
 
@@ -52,7 +54,7 @@ Use the `codex-awake` wrapper there:
         ]
       }
     ],
-    "Stop": [
+    "SessionEnd": [
       {
         "hooks": [
           {

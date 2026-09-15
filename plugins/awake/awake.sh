@@ -1,47 +1,33 @@
 #!/bin/bash
 # Prevent Mac from sleeping while any agent session is active.
-# Uses Amphetamine.app and a shared counter file for multi-session tracking.
+# Uses Amphetamine.app and per-session marker files for multi-session tracking.
 #
-# Usage:
-#   awake.sh start   — register a new session, start Amphetamine if needed
-#   awake.sh stop    — unregister a session, end Amphetamine when all done
+# Usage (hook stdin carries the session JSON):
+#   awake.sh start   — register this session, start Amphetamine if it's the first
+#   awake.sh stop    — unregister this session, end Amphetamine when none remain
 
 set -u
 
 ACTION="${1:-}"
-LOCK_DIR="${AWAKE_STATE_DIR:-$HOME/.claude/.awake}"
-COUNTER_FILE="$LOCK_DIR/sessions"
-LOCKFILE="$LOCK_DIR/lock"
+STATE_DIR="${AWAKE_STATE_DIR:-$HOME/.claude/.awake}"
+SESSIONS_DIR="$STATE_DIR/sessions.d"
 
-mkdir -p "$LOCK_DIR"
+mkdir -p "$SESSIONS_DIR"
 
-# Portable file-based locking (no flock on macOS by default)
-acquire_lock() {
-  local attempts=0
-  while ! mkdir "$LOCKFILE" 2>/dev/null; do
-    attempts=$((attempts + 1))
-    if [ "$attempts" -gt 50 ]; then
-      echo "awake: could not acquire lock" >&2
-      exit 1
-    fi
-    sleep 0.1
-  done
+# Markers are keyed by session id so repeat SessionStart events (resume, clear,
+# compact) re-register the same session instead of inflating a counter that then
+# never drains back to zero.
+session_id() {
+  local payload id
+  payload=$(cat 2>/dev/null)
+  id=$(printf '%s' "$payload" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  # Strip anything that could escape the marker directory.
+  id=$(printf '%s' "$id" | tr -cd 'A-Za-z0-9._-')
+  printf '%s' "${id:-default}"
 }
 
-release_lock() {
-  rmdir "$LOCKFILE" 2>/dev/null
-}
-
-read_count() {
-  if [ -f "$COUNTER_FILE" ]; then
-    cat "$COUNTER_FILE"
-  else
-    echo 0
-  fi
-}
-
-write_count() {
-  echo "$1" > "$COUNTER_FILE"
+active_count() {
+  find "$SESSIONS_DIR" -type f -depth 1 2>/dev/null | wc -l | tr -d ' '
 }
 
 amphetamine_start() {
@@ -61,34 +47,26 @@ amphetamine_stop() {
 
 case "$ACTION" in
   start)
-    acquire_lock
-    count=$(read_count)
-    count=$((count + 1))
-    write_count "$count"
-    release_lock
-    if [ "$count" -eq 1 ]; then
+    id=$(session_id)
+    before=$(active_count)
+    : > "$SESSIONS_DIR/$id"
+    if [ "$before" -eq 0 ]; then
       amphetamine_start
     fi
     ;;
   stop)
-    acquire_lock
-    count=$(read_count)
-    if [ "$count" -gt 0 ]; then
-      count=$((count - 1))
-    fi
-    write_count "$count"
-    release_lock
-    if [ "$count" -eq 0 ]; then
+    id=$(session_id)
+    rm -f "$SESSIONS_DIR/$id"
+    if [ "$(active_count)" -eq 0 ]; then
       amphetamine_stop
     fi
     ;;
   status)
-    echo "Active sessions: $(read_count)"
+    echo "Active sessions: $(active_count)"
+    find "$SESSIONS_DIR" -type f -depth 1 -exec basename {} \; 2>/dev/null
     ;;
   reset)
-    acquire_lock
-    write_count 0
-    release_lock
+    rm -f "$SESSIONS_DIR"/* 2>/dev/null
     amphetamine_stop
     echo "awake: reset — all sessions cleared, Amphetamine session ended"
     ;;
