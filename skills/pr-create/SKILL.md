@@ -44,6 +44,19 @@ Run in order; if any step fails, stop and report — do not proceed to PR.
 
 If a linter/formatter modifies files, stage the changes — they go in the commit. If lint or type errors remain after auto-fix, report them and ask how to proceed. For DB/migration changes, confirm the migration was generated and applied per the repo's Drizzle workflow.
 
+### Step 2b: Domain verification (main quovy repo)
+
+The table above is the deterministic half, and it is silent on most of what
+ships: it reads no workflow YAML, no Terraform, no exec plan. In the main
+`quovy` repo, invoke the `check-work` skill after the gates pass — it routes the
+diff to `verify-api` / `verify-db` / `verify-ui` / `verify-worker` /
+`verify-infra` / `verify-ci` / `verify-docs`.
+
+**Do not skip this because the gates were green on a CI-only, infra-only or
+docs-only PR.** Those are exactly the diffs where green means nothing, and they
+are where review findings concentrate. If a domain skill cannot run (no stack,
+no credentials), say which one and why in the PR body rather than omitting it.
+
 ## Step 3: Branch (if needed)
 
 If already on a feature branch (not `main`/`master`), keep it. Otherwise create one — never commit to `main`:
