@@ -22,7 +22,7 @@
       "args": [],
       "needs_env": ["GMAIL_OAUTH_PATH", "GMAIL_CREDENTIALS_PATH"],
       "env": {
-        "PORT": "39271",
+        "PORT": "0",
         "AUTH_SERVER_PORT": "39272"
       },
       "auth": {
