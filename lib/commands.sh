@@ -32,19 +32,29 @@ prompt_yes() {
   [ "$ans" = "y" ] || [ "$ans" = "Y" ]
 }
 
-# Locate an item by name. Echoes "type|path" (type is skill or plugin), returns 1 if not found.
+# Locate items by name. Echoes one "type|path" line per match (type is skill,
+# plugin, or shell) — a skill and a shell helper may share a name (e.g. `threads`).
+# Prefix with "skill:", "plugin:", or "shell:" to restrict. Returns 1 if none.
 find_item() {
-  local want="$1" dir type resolved
+  local want="$1" only="" found=0 dir type resolved
+  case "$want" in
+    skill:*|plugin:*|shell:*) only="${want%%:*}"; want="${want#*:}" ;;
+  esac
   for dir in "$SKILLS_DIR:skill" "$PLUGINS_DIR:plugin"; do
     type="${dir##*:}"
+    [ -z "$only" ] || [ "$only" = "$type" ] || continue
     local base="${dir%:*}"
     [ -e "$base/$want" ] || continue
     resolved="$(resolve_path "$base/$want" 2>/dev/null)" || continue
     [ -d "$resolved" ] || continue
     echo "$type|$base/$want"
-    return 0
+    found=1
   done
-  return 1
+  if { [ -z "$only" ] || [ "$only" = "shell" ]; } && [ -f "$(shell_entry "$want")" ]; then
+    echo "shell|$SHELL_DIR/$want"
+    found=1
+  fi
+  [ "$found" -eq 1 ]
 }
 
 # Expand a group name from groups.json into a newline-separated list of item names.
@@ -82,6 +92,15 @@ install_item() {
       display_target="~/.claude/skills"
     fi
     echo -e "  ${GREEN}✓${RESET} $name -> $display_target/$name  ${DIM}(skill)${RESET}"
+    return
+  fi
+
+  if [ "$type" = "shell" ]; then
+    # Shell helpers are user-scoped only: a tagged `source` line in ~/.zshrc.
+    if prompt_yes "$assume_yes" "  ${YELLOW}Add 'source shell/$name/$name.zsh' to ${ZSHRC/#$HOME/~}? [y/N]: ${RESET}"; then
+      install_shell_helper "$name"
+      SHELL_TOUCHED=1
+    fi
     return
   fi
 
@@ -154,6 +173,19 @@ cmd_default() {
     done
   fi
 
+  # Collect shell helpers from shell/
+  if [ -d "$SHELL_DIR" ]; then
+    for item in "$SHELL_DIR"/*/; do
+      local name
+      name="$(basename "$item")"
+      [ -f "$(shell_entry "$name")" ] || continue
+      all_names+=("$name")
+      all_types+=("shell")
+      all_descs+=("$(shell_description "$name")")
+      all_paths+=("${item%/}")
+    done
+  fi
+
   if [ ${#all_names[@]} -eq 0 ]; then
     echo -e "${YELLOW}No skills or plugins found in this repo.${RESET}"
     echo -e "Use ${BOLD}./install add <user/repo>${RESET} to add some from GitHub."
@@ -161,7 +193,7 @@ cmd_default() {
   fi
 
   # Build pipe-separated strings for multiselect
-  local labels="" descs="" tags="" preselect=""
+  local labels="" descs="" tags="" preselect="" types=""
   for idx in "${!all_names[@]}"; do
     local name="${all_names[$idx]}"
     local type="${all_types[$idx]}"
@@ -182,6 +214,11 @@ cmd_default() {
       install_level="$(skill_install_level "$name")"
     elif [ "$type" = "plugin" ]; then
       install_level="$(plugin_install_level "$name")"
+    elif [ "$type" = "shell" ]; then
+      local shell_tag
+      shell_tag="$(shell_status "$name")"
+      tag="shell v$(file_version "$(shell_entry "$name")")"
+      [ -n "$shell_tag" ] && tag="$tag  $shell_tag"
     fi
     if [ -n "$install_level" ]; then
       tag="$tag  $(installed_tag "$install_level")"
@@ -191,18 +228,17 @@ cmd_default() {
     [ -n "$descs" ] && descs="$descs|"
     [ -n "$tags" ] && tags="$tags|"
     [ -n "$preselect" ] && preselect="$preselect|"
+    [ -n "$types" ] && types="$types|"
     labels="$labels$name"
     descs="$descs$desc"
     tags="$tags$tag"
     preselect="${preselect}0"
+    types="$types$type"
   done
 
-  echo ""
-  echo -e "${BOLD}Select skills & plugins to install:${RESET}"
-  echo ""
-
   local ms_result=""
-  multiselect ms_result "$labels" "$descs" "$tags" "$preselect"
+  multiselect ms_result "$labels" "$descs" "$tags" "$preselect" "$types" \
+    "Select skills, plugins & shell helpers to install"
 
   # Check for cancel
   if [[ "$ms_result" == cancel* ]]; then
@@ -237,8 +273,14 @@ cmd_default() {
     in_git_repo=1
   fi
 
+  # Shell helpers are always user-scoped; only ask about scope for the rest.
+  local needs_scope=0
+  for idx in "${selected_indices[@]}"; do
+    [ "${all_types[$idx]}" != "shell" ] && needs_scope=1
+  done
+
   echo ""
-  if [ "$in_git_repo" -eq 1 ]; then
+  if [ "$in_git_repo" -eq 1 ] && [ "$needs_scope" -eq 1 ]; then
     echo -e "${BOLD}Install to:${RESET}"
     echo -e "  ${GREEN}[1]${RESET} This project  ${DIM}($git_root/.claude/skills/)${RESET}"
     echo -e "  ${GREEN}[2]${RESET} User (global)  ${DIM}(~/.claude/skills/)${RESET}"
@@ -271,6 +313,7 @@ cmd_default() {
   echo ""
   mkdir -p "$target_skills_dir"
 
+  SHELL_TOUCHED=0
   for idx in "${selected_indices[@]}"; do
     install_item \
       "${all_names[$idx]}" "${all_types[$idx]}" "${all_paths[$idx]}" \
@@ -279,6 +322,7 @@ cmd_default() {
 
   echo ""
   echo -e "${GREEN}Done!${RESET} Installed to ${BOLD}$install_scope${RESET} scope."
+  [ "$SHELL_TOUCHED" -eq 1 ] && echo -e "${DIM}Restart your shell or run: source ${ZSHRC/#$HOME/~}${RESET}"
 }
 
 # ── get (non-interactive) ────────────────────────────────────────────
@@ -305,7 +349,7 @@ cmd_get() {
   fi
 
   if [ ${#names[@]} -eq 0 ]; then
-    echo -e "${RED}Usage: ./install get [--scope user|project] [--group <group>] [--yes] <name...>${RESET}"
+    echo -e "${RED}Usage: ./install get [--scope user|project] [--group <group>] [--yes] <name|skill:name|plugin:name|shell:name ...>${RESET}"
     exit 1
   fi
 
@@ -334,19 +378,24 @@ cmd_get() {
 
   mkdir -p "$target_skills_dir"
   echo ""
-  local n entry type path
+  SHELL_TOUCHED=0
+  local n entries entry type path
   for n in "${names[@]}"; do
-    if ! entry="$(find_item "$n")"; then
+    if ! entries="$(find_item "$n")"; then
       echo -e "  ${YELLOW}⚠${RESET} $n — not found, skipped"
       continue
     fi
-    type="${entry%%|*}"
-    path="${entry#*|}"
-    install_item "$n" "$type" "$path" \
-      "$install_scope" "$target_skills_dir" "$plugin_scope_flag" "$assume_yes" "$git_root"
+    while IFS= read -r entry; do
+      [ -n "$entry" ] || continue
+      type="${entry%%|*}"
+      path="${entry#*|}"
+      install_item "$(basename "$path")" "$type" "$path" \
+        "$install_scope" "$target_skills_dir" "$plugin_scope_flag" "$assume_yes" "$git_root"
+    done <<< "$entries"
   done
   echo ""
   echo -e "${GREEN}Done!${RESET} Installed to ${BOLD}$install_scope${RESET} scope."
+  [ "$SHELL_TOUCHED" -eq 1 ] && echo -e "${DIM}Restart your shell or run: source ${ZSHRC/#$HOME/~}${RESET}"
 }
 
 # ── add ──────────────────────────────────────────────────────────────
@@ -401,7 +450,7 @@ cmd_add() {
   done
 
   # Build pipe-separated strings for multiselect
-  local labels="" descs="" tags="" preselect=""
+  local labels="" descs="" tags="" preselect="" types=""
   for idx in "${!all_items[@]}"; do
     local name="${all_items[$idx]}"
     local type="${item_types[$idx]}"
@@ -437,18 +486,17 @@ cmd_add() {
     [ -n "$descs" ] && descs="$descs|"
     [ -n "$tags" ] && tags="$tags|"
     [ -n "$preselect" ] && preselect="$preselect|"
+    [ -n "$types" ] && types="$types|"
     labels="$labels$display_name"
     descs="$descs$desc"
     tags="$tags$tag"
     preselect="${preselect}0"
+    types="$types$type"
   done
 
-  echo ""
-  echo -e "${BOLD}Found ${#all_items[@]} item(s) in $slug. Select items to add:${RESET}"
-  echo ""
-
   local ms_result=""
-  multiselect ms_result "$labels" "$descs" "$tags" "$preselect"
+  multiselect ms_result "$labels" "$descs" "$tags" "$preselect" "$types" \
+    "Found ${#all_items[@]} item(s) in $slug. Select items to add"
 
   if [[ "$ms_result" == cancel* ]]; then
     echo ""
@@ -596,6 +644,23 @@ cmd_list() {
   fi
   [ "$found" -eq 0 ] && echo -e "  ${DIM}(none)${RESET}"
 
+  echo ""
+  echo -e "${BOLD}Shell helpers:${RESET}"
+  found=0
+  if [ -d "$SHELL_DIR" ]; then
+    for item in "$SHELL_DIR"/*/; do
+      local name
+      name="$(basename "$item")"
+      [ -f "$(shell_entry "$name")" ] || continue
+      local status managed=""
+      status="$(shell_status "$name")"
+      shell_managed "$name" && managed="  ${DIM}(sourced via ${ZSHRC/#$HOME/~})${RESET}"
+      echo -e "  ${GREEN}•${RESET} $name  ${DIM}repo v$(file_version "$(shell_entry "$name")")${RESET}  ${status:-${DIM}not available in shell${RESET}}$managed"
+      found=1
+    done
+  fi
+  [ "$found" -eq 0 ] && echo -e "  ${DIM}(none)${RESET}"
+
   # Show sources
   if [ -f "$SOURCES_FILE" ]; then
     echo ""
@@ -641,6 +706,12 @@ cmd_remove() {
     removed=1
   elif [ -d "$PLUGINS_DIR/$name" ]; then
     echo -e "${YELLOW}⚠${RESET} $name is a local plugin directory (not a symlink). Remove manually if intended."
+  fi
+
+  # Check shell helpers
+  if remove_shell_helper "$name"; then
+    echo -e "${GREEN}✓${RESET} Removed shell helper: $name  ${DIM}(source line dropped from ${ZSHRC/#$HOME/~})${RESET}"
+    removed=1
   fi
 
   if [ "$removed" -eq 0 ]; then
@@ -721,6 +792,19 @@ cmd_clean() {
     done
   fi
   [ "$plugin_removed" -eq 0 ] && echo -e "  ${DIM}(none)${RESET}"
+
+  echo -e "\n${BOLD}Shell helpers${RESET}"
+  local shell_removed=0
+  if [ -d "$SHELL_DIR" ]; then
+    for dir in "$SHELL_DIR"/*/; do
+      local sname
+      sname="$(basename "$dir")"
+      remove_shell_helper "$sname" || continue
+      echo -e "  ${GREEN}✓${RESET} removed source line for $sname from ${ZSHRC/#$HOME/~}"
+      shell_removed=1
+    done
+  fi
+  [ "$shell_removed" -eq 0 ] && echo -e "  ${DIM}(none)${RESET}"
 
   echo -e "\n${DIM}Left in place: MCP servers (remove with 'claude mcp remove <name> -s user'), Codex hooks (~/.codex), and the '$MARKETPLACE_NAME' marketplace.${RESET}"
   echo ""
