@@ -41,9 +41,9 @@ Run `./install` to pick from everything available and install to `~/.claude/`:
 ```bash
 ./install                         # interactive picker for all skills & plugins
 ./install add garrytan/gstack     # clone a GitHub repo and pick items to add
-./install list                    # show what's installed
-./install remove <name>           # remove a skill or plugin
-./install clean                   # remove every skill + plugin this repo installed into ~/.claude
+./install list                    # show what's installed (+ shell helper versions)
+./install remove <name>           # remove a skill, plugin, or shell helper
+./install clean                   # remove every skill + plugin + shell helper this repo installed
 ./install update                  # pull latest for all repos
 ```
 
@@ -66,6 +66,26 @@ Drain a drifted Gmail inbox back to single/double digits: fan out parallel bucke
 ### [dependabot-triage](skills/dependabot-triage/)
 
 Triage and remediate open Dependabot pull requests and security alerts in a repo end-to-end. Enumerates both surfaces (version PRs and security alerts are separate), assesses each bump's real blast radius by grepping actual usage and reading the real changelog (never from memory), splits the work into batched-low / individual-medium / spike-high buckets, applies fixes in parallel worktrees, closes transitive CVEs with **bounded** `pnpm.overrides`, and sequences merges around the pnpm-lock cascade. Bundles a Workflow-tool script (`workflow.mjs`) that automates the enumerate-and-assess half. Requires `gh` authenticated for the repo.
+
+### [threads](skills/threads/)
+
+`/threads` — list recent Claude, Codex, and Grok threads (filter by `today`, `2h`, `7d`, agent, or this repo). Reads via `$THREADS_PY`, exported by the `threads` shell helper below.
+
+### [audit-skills](skills/audit-skills/)
+
+`/audit-skills` — where each skill lives (canonical synced dir vs `~/.claude`, `~/.codex`, `~/.grok`, project) and how it is linked. Reads via `$SKILLS_PY`, exported by the `skills` shell helper below.
+
+## Shell helpers
+
+zsh functions under [`shell/`](shell/), one directory per helper with a `<name>.zsh` entry file. `./install` (picker tab "Shell helpers", or `./install get shell:<name>`) adds a tagged `source` line to `~/.zshrc`. Status is detected by running `<name> --version` in your shell, so it works however you load them — via `./install`, your own dotfiles, or a synced copy. `./install list` shows the version your shell has vs. the repo's. A helper's version is the `# version:` header in its entry file — bump it when behavior changes.
+
+| Helper | What it does |
+|---|---|
+| [shell/threads](shell/threads/) | `threads` picker and `resume <id\|alias>` — cd into a past Claude/Codex/Grok thread's directory and resume it. |
+| [shell/skills](shell/skills/) | `skills` — audit where agent skills live and sync/link them between the canonical dir and each agent's skills dir. |
+| [shell/open](shell/open/) | `open 1156` opens PR #1156 via `gh pr view --web`; anything else falls through to the system `open`. |
+
+Shell helpers are user-scoped only and are not part of any `groups.json` / `profiles.json` bundle (installing one edits `~/.zshrc`, so it stays opt-in).
 
 ## Plugins
 

@@ -94,6 +94,15 @@ Rule of thumb: **secrets and per-machine values** (tokens, `AWS_PROFILE`, absolu
 ```
 Then **restart Claude Code** (servers load at session start) and run `/mcp` to connect. `./install mcp list` shows registration status; `./install mcp setup` does deps + register-all + auth-all in one shot.
 
+## Add a shell helper
+
+A shell helper is a zsh function (or a small family of them) that users source from `~/.zshrc`.
+
+1. Create `shell/<name>/<name>.zsh` defining a function `<name>`. Line 2 must be `# version: X.Y.Z`, and the function must answer `<name> --version` with `<name> X.Y.Z` — that is how `./install` detects it and compares versions, wherever the user sources it from. Resolve sibling files relative to the entry file (`${${(%):-%x}:A:h}`), never a hardcoded path.
+2. Add `shell/<name>/README.md`; its first non-heading line is the picker description.
+3. If an agent skill wraps it, export the engine path (e.g. `export THREADS_PY=…`) from the `.zsh` file and reference it as `${THREADS_PY:-<fallback>}` in the skill.
+4. Don't add it to `groups.json` / `profiles.json` — shell helpers edit `~/.zshrc`, so they stay opt-in via the picker or `./install get shell:<name>`.
+
 ## Add a setup profile
 
 [`profiles.json`](profiles.json) maps a name to a bundle of skills/plugins (`items`) and MCP servers (`mcp`). `extends` merges a base; `"*"` means everything available.
