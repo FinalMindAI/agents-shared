@@ -18,7 +18,7 @@
       "mcp": ["slack", "gmail", "aws-mcp", "azure", "datadog", "sentry", "linear", "notion"]
     },
     "all": {
-      "description": "Everything: every first-party skill/plugin and every MCP server (incl. github/langfuse-prod, which stay unconnected until their header tokens are exported).",
+      "description": "Everything: every first-party skill/plugin and every MCP server (incl. github/langfuse-prod/langfuse-staging, which stay unconnected until their header tokens are exported).",
       "items": ["*"],
       "mcp": ["*"]
     }
