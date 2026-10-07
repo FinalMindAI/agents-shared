@@ -109,6 +109,20 @@
       },
       "_desc": "Langfuse (prod) hosted MCP server — LLM traces/observability. Auth via a Basic header token.",
       "_prereq": "Requires LANGFUSE_PROD_MCP_AUTH exported in the launching shell (see auth.instructions). Not auto-registered until the token exists."
+    },
+    "langfuse-staging": {
+      "kind": "http",
+      "url": "https://langfuse.qvy-staging.com/api/public/mcp",
+      "headers": {
+        "Authorization": "Basic ${LANGFUSE_STAGING_MCP_AUTH}"
+      },
+      "needs_env": ["LANGFUSE_STAGING_MCP_AUTH"],
+      "auth": {
+        "type": "manual",
+        "instructions": "Header-secret server (no OAuth). LANGFUSE_STAGING_MCP_AUTH must be a base64 'publicKey:secretKey' string, exported into the shell that launches Claude Code (http headers are sent by Claude Code directly, NOT via mcp/with-env). Steps: 1) In Langfuse staging (langfuse.qvy-staging.com) → Settings → API Keys, copy the public + secret key. 2) base64-encode 'PUBLIC:SECRET' (printf '%s' 'pk:sk' | base64). 3) Store it in 1Password and add to your shell rc: export LANGFUSE_STAGING_MCP_AUTH=$(op read 'op://<vault>/langfuse-staging-mcp/credential'). 4) Re-register: ./install mcp get --force langfuse-staging, then restart Claude Code + /mcp."
+      },
+      "_desc": "Langfuse (staging) hosted MCP server — LLM traces/observability. Auth via a Basic header token.",
+      "_prereq": "Requires LANGFUSE_STAGING_MCP_AUTH exported in the launching shell (see auth.instructions). Not auto-registered until the token exists."
     }
   }
 }

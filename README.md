@@ -160,9 +160,10 @@ Most servers are one OAuth click in `/mcp`. Two need a one-time setup you do you
 5. Mint credentials: `node_modules/.bin/gmail-mcp auth` — opens a browser for `gmail.modify` + `gmail.settings.basic`, writes `~/.gmail-mcp/credentials.json`.
 6. Restart Claude Code → `/mcp`.
 
-**http header-secret servers (`langfuse-prod`, `github`)** — these authenticate with a token in an HTTP **header**, which is the one case `mcp/with-env` can't cover: Claude Code sends http headers itself, not through the stdio wrapper. So the token has to be **exported in the shell that launches Claude Code** (best via `op` in your shell rc). The manifest stores only a `${VAR}` reference in the header, never the token.
+**http header-secret servers (`langfuse-prod`, `langfuse-staging`, `github`)** — these authenticate with a token in an HTTP **header**, which is the one case `mcp/with-env` can't cover: Claude Code sends http headers itself, not through the stdio wrapper. So the token has to be **exported in the shell that launches Claude Code** (best via `op` in your shell rc). The manifest stores only a `${VAR}` reference in the header, never the token.
 
 - **`langfuse-prod`** (Basic auth): Langfuse (`langfuse.quovy.com`) → **Settings → API Keys** → copy public + secret → `printf '%s' 'PUBLIC:SECRET' | base64` → `export LANGFUSE_PROD_MCP_AUTH=$(op read 'op://<vault>/langfuse-prod-mcp/credential')` in your rc → `./install mcp get --force langfuse-prod` → restart + `/mcp`.
+- **`langfuse-staging`**: same as `langfuse-prod`, but keys from `langfuse.qvy-staging.com` → `export LANGFUSE_STAGING_MCP_AUTH=$(op read 'op://<vault>/langfuse-staging-mcp/credential')` → `./install mcp get --force langfuse-staging`.
 - **`github`** (Bearer PAT): the hosted `api.githubcopilot.com` endpoint rejects Claude Code's OAuth dynamic client registration, so use a PAT. github.com → **Settings → Developer settings → Personal access tokens** → fine-grained token with the scopes you need → `export GITHUB_MCP_PAT=$(op read 'op://<vault>/github-mcp/token')` in your rc → `./install mcp get github` → restart + `/mcp`.
 
 Once exported, `./install mcp list` still shows these as "not registered" until you register them, and `/mcp` shows them connected once the header token resolves.
